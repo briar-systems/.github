@@ -1,28 +1,29 @@
 ---
 name: Bug
-about: An unexpected error, defect, or incorrect behavior
+about: Defect, unexpected crash, or behavior contradicting specification
 title: ""
 labels: ["fix", "patch"]
 ---
 
 <!--
-Before submitting, adjust these in the sidebar:
-  where     testing, tooling, or doc (leave blank for core code)
-  flags     critical, blocked, or security, when they apply
-Put relationships in the body, like "Part of #N" or "Depends on #M".
+Sidebar tags to verify:
+  magnitude: patch (default), minor, major
+  kind:      fix (default)
+  where:     testing, tooling, or doc (leave blank for core code)
+  severity:  critical, blocked, or security, when applicable
 -->
 
 ## What
 
-<!-- A concise summary of the defect. -->
+<!-- A concise summary of the observed defect. -->
 
 ## Repro
 
-<!-- Minimal steps or input to reproduce the issue. -->
+<!-- Minimal steps, commands, or source code to reproduce the issue. -->
 
 ## Expected
 
-<!-- What should happen, and why. -->
+<!-- What should happen according to specification, documentation, or design. -->
 
 ## Actual
 
@@ -30,4 +31,4 @@ Put relationships in the body, like "Part of #N" or "Depends on #M".
 
 ## Environment
 
-<!-- Target architecture, operating system, and version or commit hash. -->
+<!-- Target architecture, operating system, and toolchain version or commit hash. -->

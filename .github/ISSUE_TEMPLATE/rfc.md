@@ -1,29 +1,30 @@
 ---
 name: RFC
-about: Design discussion, architecture proposal, or open question
+about: Design discussion, architecture proposal, or open debate
 title: "RFC: "
 labels: ["discussion", "minor"]
 ---
 
 <!--
-Before submitting, adjust these in the sidebar:
-  where     testing, tooling, or doc (leave blank for core code)
-  flags     blocked, when it applies
-Put relationships in the body, like "Part of #N" or "Depends on #M".
+Sidebar tags to verify:
+  magnitude: minor (default), major
+  kind:      discussion (default)
+  where:     testing, tooling, or doc (leave blank for core code)
+  severity:  blocked, when applicable
 -->
 
 ## Problem
 
-<!-- What forces a decision or design choice. -->
+<!-- What forces a decision or architectural choice. -->
 
 ## Proposal
 
-<!-- The proposed direction and trade-offs. -->
+<!-- The proposed direction, contract, and trade-offs. -->
 
 ## Alternatives
 
-<!-- Other options considered and reasons for or against them. -->
+<!-- Other directions considered and reasons for or against them. -->
 
-## Open questions
+## Open Questions
 
-- <!-- Items that need resolution before moving to implementation -->
+- <!-- Concrete questions that must be resolved before implementation -->

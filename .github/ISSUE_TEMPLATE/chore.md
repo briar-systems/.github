@@ -1,21 +1,22 @@
 ---
 name: Chore
-about: Maintenance, dependency updates, refactoring, or tooling upkeep
+about: Routine upkeep, dependency bumps, code refactoring, or pruning
 title: ""
 labels: ["chore", "patch"]
 ---
 
 <!--
-Before submitting, adjust these in the sidebar:
-  where     testing, tooling, or doc (leave blank for core code)
-  flags     critical or blocked, when they apply
-Put relationships in the body, like "Part of #N" or "Depends on #M".
+Sidebar tags to verify:
+  magnitude: patch (default), minor
+  kind:      chore (default), removal
+  where:     testing, tooling, or doc (leave blank for core code)
+  severity:  critical or blocked, when applicable
 -->
 
 ## What
 
-<!-- The maintenance task and why it is needed now. -->
+<!-- The maintenance or refactoring task and why it is needed now. -->
 
 ## Acceptance
 
-- [ ] <!-- The concrete done state -->
+- [ ] <!-- Concrete verifiable done state -->
