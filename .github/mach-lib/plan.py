@@ -180,14 +180,16 @@ def plan(inputs, base_ref, root):
     tier = 'heavy' if full else 'light'
     heavy = 'all' if full else ','.join(selection)
 
-    # fmt belongs to the light tier, so it needs a light leg to run on
-    if inputs['fmt'] and not any(leg['tier'] == 'light' and leg['name'] not in skip for leg in legs):
-        raise PlanError('fmt is on but no light leg runs it; add a light leg or set fmt: false')
+    # a pull request into dev runs only light legs, so without one it would build
+    # nothing and gate would pass. the primary leg, and with it fmt and
+    # all-targets, is always a light leg
+    if not any(leg['tier'] == 'light' and leg['name'] not in skip for leg in legs):
+        raise PlanError('no light leg runs, so a pull request into dev would build nothing; '
+                        'add a light leg, promote one with light-legs, or skip fewer legs')
 
     included = [leg for leg in legs if leg['name'] not in skip and
                 (leg['tier'] == 'light' or full or leg['name'] in selection)]
-    primary = next((leg['name'] for leg in included if leg['tier'] == 'light'),
-                   included[0]['name'] if included else '')
+    primary = next(leg['name'] for leg in included if leg['tier'] == 'light')
     for leg in included:
         leg['primary'] = leg['name'] == primary
         leg['run-tier'] = 'heavy' if full or leg['name'] in selection else 'light'
@@ -239,7 +241,6 @@ def main():
     with open(env['GITHUB_OUTPUT'], 'a') as output:
         output.write('matrix=' + json.dumps(matrix) + '\n')
         output.write('config=' + json.dumps(config) + '\n')
-        output.write('any=' + ('true' if matrix['include'] else 'false') + '\n')
 
 
 if __name__ == '__main__':
