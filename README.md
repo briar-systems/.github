@@ -8,7 +8,8 @@ The family CI contract:
 
 - each repo has one `.github/workflows/ci.yml`, and a release workflow where one exists
 - a pull request into `dev` runs the light tier, a pull request into `main` runs every tier, and `workflow_dispatch` pulls named heavy work onto any ref
-- nothing runs on push, and nothing runs on a schedule
+- nothing runs on push, and nothing runs on a schedule. Deploy-only workflows are the exception
+- a `ci.yml` that a release or cd workflow calls also declares a `workflow_call` input `heavy`, and the caller passes `all`. A tag push has no base branch, so without it the release would run only the light tier
 - every `ci.yml` ends in a job named exactly `gate` that needs every other job. It fails when a needed job finished `failure` or `cancelled` and passes `skipped`. `gate` is the one required check
 
 The toolkit:
@@ -144,6 +145,36 @@ A hook switches on `MACH_CI_LEG` for per-host work. It reads `MACH_CI_TIER` or `
 
 **Extra jobs** are ordinary jobs in the caller. A heavy-only job uses `if: github.base_ref == 'main' || inputs.heavy == 'all' || inputs.heavy == '<name>'`, and `<name>` goes in the dispatch options. It can seed through `briar-systems/.github/.github/actions/seed-mach@main`. Every extra job goes in `gate`'s `needs:`.
 
+### Called from a release workflow
+
+`inputs.heavy` resolves from whichever trigger started the run, so one `lib` job serves a dispatch and a call alike:
+
+```yaml
+on:
+  pull_request:
+  workflow_call:
+    inputs:
+      heavy:
+        type: string
+        default: none
+  workflow_dispatch:
+    inputs:
+      heavy:
+        type: choice
+        default: none
+        options: [none, all, aarch64-linux, x86_64-windows, aarch64-darwin, x86_64-darwin]
+```
+
+The release workflow calls it with the full tier:
+
+```yaml
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+    with:
+      heavy: all
+```
+
 ### Override example
 
 This caller has a live service stack, a subproject that resolves the library as a non-root, a qemu leg, no Windows leg, and a heavy-only job.
@@ -225,4 +256,4 @@ esac
 
 ### Versions
 
-Callers reference the toolkit at `@main`. The workflow checks out its actions and scripts at its own commit, so one caller ref pins all of them together. The mach seed pin is `.github/actions/seed-mach/version`. Bumping it is one pull request here, and it moves every caller that has not set `mach-version`.
+Callers reference the workflow and the gate and seed actions at `@main`. A toolkit change lands on `dev` first, and this repo's `dev` to `main` pull request, which runs every leg, is its release gate. The workflow checks out its actions and scripts at its own commit, so one caller ref pins all of them together. The mach seed pin is `.github/actions/seed-mach/version`. Bumping it is one pull request here, and it moves every caller that has not set `mach-version`.
