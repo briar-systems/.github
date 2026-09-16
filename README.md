@@ -115,7 +115,7 @@ A **leg** is `{"name", "runs-on"}` plus these optional keys:
 | `build-args` | none | string array appended to every build on the leg, including subproject builds |
 | `test-args` | none | string array appended to every test on the leg, including subproject tests |
 | `apt` | none | packages installed first. Linux legs only |
-| `env` | none | string map exported to every step |
+| `env` | none | string map exported to every step. Names must be shell variable names, values one line, and `MACH_COMPILER`, `MACH_CI_*` and `MACH_LIB_*` belong to the toolkit |
 | `test` | `true` | `false` makes the leg build-only |
 | `timeout` | `timeout-minutes` | leg timeout |
 
