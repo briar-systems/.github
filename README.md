@@ -10,7 +10,19 @@ The family CI contract:
 - a pull request into `dev` runs the light tier, a pull request into `main` runs every tier, and `workflow_dispatch` pulls named heavy work onto any ref
 - nothing runs on push, and nothing runs on a schedule. Deploy-only workflows are the exception
 - a `ci.yml` that a release or cd workflow calls also declares a `workflow_call` input `heavy`, and the caller passes `all`. A tag push has no base branch, so without it the release would run only the light tier
+- tiering is strict: only `x86_64-linux` is light unless a ruling below says otherwise
+- every adoption pull request includes a `mach fmt .` pass, since the light tier checks formatting
 - every `ci.yml` ends in a job named exactly `gate` that needs every other job. It fails when a needed job finished `failure` or `cancelled` and passes `skipped`. `gate` is the one required check
+
+The upstream forks, compiler-explorer and infra, are outside the contract.
+
+Per-repo light sets (ruled 2026-09-16):
+
+| repo | light legs | caller input |
+| --- | --- | --- |
+| mach-std | `x86_64-linux`, `x86_64-windows`, `aarch64-darwin` | `light-legs: '["x86_64-windows", "aarch64-darwin"]'` |
+| mach-lsp | `x86_64-linux`, `x86_64-windows` | `light-legs: '["x86_64-windows"]'` |
+| every other repo | `x86_64-linux` | none |
 
 The toolkit:
 
@@ -80,6 +92,7 @@ Every override is an input. There is nothing to fork.
 | `legs` | the five hosts above | JSON array that replaces the host set |
 | `extra-legs` | none | JSON array appended to the host set |
 | `skip-legs` | none | JSON array of leg names to drop |
+| `light-legs` | none | JSON array of leg names to run in the light tier. Only the repos ruled above use it |
 | `project` | `.` | the project directory, for a repo whose real project is not the root |
 | `profiles` | `["debug", "release"]` | profiles to build and test |
 | `test` | `true` | run `mach test` on the project |
