@@ -22,6 +22,7 @@ Per-repo light sets (ruled 2026-09-16):
 | --- | --- | --- |
 | mach-std | `x86_64-linux`, `x86_64-windows`, `aarch64-darwin` | `light-legs: '["x86_64-windows", "aarch64-darwin"]'` |
 | mach-lsp | `x86_64-linux`, `x86_64-windows` | `light-legs: '["x86_64-windows"]'` |
+| .github | `x86_64-linux`, `aarch64-linux` | `light-legs: '["aarch64-linux"]'`, a self-test of the `light-legs` input |
 | every other repo | `x86_64-linux` | none |
 
 The toolkit:
@@ -81,6 +82,13 @@ With no other inputs, a pull request into `dev` runs these steps on `x86_64-linu
 5. `mach build . --all-targets --profile release`
 
 A pull request into `main` adds native `aarch64-linux`, `x86_64-windows`, `aarch64-darwin` and `x86_64-darwin` legs.
+
+### Caller requirements
+
+- the caller grants `permissions: contents: read`. The gate reads its own workflow file and the seed reads mach releases through `github.token`, so `permissions: {}` breaks both
+- every leg's runner provides Python 3.11 or newer as `python`, because the leg scripts use `tomllib`. The hosted images do. A custom `runs-on` has to provide it as well
+- the `gate` job runs on `ubuntu-latest`, or on another runner where `python` can import PyYAML
+- the leg job checks the toolkit out to `.mach-lib/` inside the workspace. The seed goes under `$RUNNER_TEMP` and never lands in the workspace
 
 ### Override surface
 
@@ -273,3 +281,5 @@ esac
 ### Versions
 
 Callers reference the workflow and the gate and seed actions at `@main`. A toolkit change lands on `dev` first, and this repo's `dev` to `main` pull request, which runs every leg, is its release gate. The workflow checks out its actions and scripts at its own commit, so one caller ref pins all of them together. The mach seed pin is `.github/actions/seed-mach/version`. Bumping it is one pull request here, and it moves every caller that has not set `mach-version`.
+
+Because every caller follows `main`, the toolkit has no version tags. A release is the `dev` to `main` pull request, and the org-wide note in CONTRIBUTING about tagging releases does not apply to this repo. Before that pull request merges, every adopter's `dev` is preflighted against the change.
