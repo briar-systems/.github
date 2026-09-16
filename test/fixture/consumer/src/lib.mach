@@ -1,0 +1,11 @@
+# a subproject that resolves the fixture as a path dependency
+
+use std.runtime;
+use fixture.lib.add;
+
+test "consumer: fixture resolves through its path dependency" {
+    if (add(40, 2) != 42) {
+        ret 1;
+    }
+    ret 0;
+}

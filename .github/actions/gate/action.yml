@@ -1,0 +1,35 @@
+name: gate
+description: fail when any needed job failed or was cancelled, and when the gate does not need every other job in its workflow
+
+# the job that uses this action must be named `gate`, run `if: always()` and
+# pass `needs: ${{ toJSON(needs) }}`. the check context a ruleset requires is the
+# job's own name, so the job lives in each repo's ci.yml and only its logic lives
+# here: a `gate` inside a called workflow reports as `<caller job> / gate`.
+
+inputs:
+  needs:
+    description: the calling job's needs context, as toJSON(needs)
+    required: true
+  token:
+    description: token used to read the workflow file the gate belongs to
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: gate
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        NEEDS: ${{ inputs.needs }}
+        GATE_JOB: ${{ github.job }}
+        WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+        WORKFLOW_SHA: ${{ job.workflow_sha }}
+        WORKFLOW_PATH: ${{ job.workflow_file_path }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        gh api -H 'Accept: application/vnd.github.raw' \
+          "repos/$WORKFLOW_REPOSITORY/contents/$WORKFLOW_PATH?ref=$WORKFLOW_SHA" > "$RUNNER_TEMP/gate-workflow.yml"
+        python "$ACTION_PATH/gate.py" "$RUNNER_TEMP/gate-workflow.yml"
