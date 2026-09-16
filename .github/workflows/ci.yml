@@ -53,7 +53,9 @@ jobs:
         [{"name": "riscv64-linux", "runs-on": "ubuntu-latest", "tier": "heavy",
           "target": "linux-riscv64", "runner": "qemu-riscv64", "test-args": ["--jobs", "1"],
           "apt": ["qemu-user"]}]
-      subprojects: '[{"path": "test/fixture/consumer", "clean-dep": true}]'
+      subprojects: >-
+        [{"path": "test/fixture/consumer", "clean-dep": true},
+         {"path": "test/fixture/examples/*", "build": true, "test": false}]
       evidence: test/fixture/out/
 
   # a caller-owned heavy job seeding directly, through the newest published
