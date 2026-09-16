@@ -1,0 +1,193 @@
+name: mach library
+
+# the tiered pipeline every mach library runs. a pull request into dev runs the
+# light legs, a pull request into main runs every leg, and a dispatch names the
+# heavy legs it wants through `heavy`. the caller owns `gate`: a job inside a
+# called workflow reports as `<caller job> / <job>`, and only the caller can
+# need the caller's own extra jobs. see README.md for the contract.
+
+on:
+  workflow_call:
+    inputs:
+      heavy:
+        description: heavy work a dispatch asked for, as none, all, or a comma list of leg names and caller-owned names; forward the caller's dispatch input
+        type: string
+        default: none
+      legs:
+        description: JSON array of legs replacing the default host set; see README.md for the leg schema
+        type: string
+        default: ""
+      extra-legs:
+        description: JSON array of legs appended to the host set
+        type: string
+        default: ""
+      skip-legs:
+        description: JSON array of leg names to drop
+        type: string
+        default: ""
+      project:
+        description: directory of the project to build and test
+        type: string
+        default: .
+      profiles:
+        description: JSON array of profiles to build and test
+        type: string
+        default: '["debug", "release"]'
+      test:
+        description: run mach test on the project
+        type: boolean
+        default: true
+      fmt:
+        description: run mach fmt --check once, on the primary leg
+        type: boolean
+        default: true
+      all-targets:
+        description: build every manifest target in release once, on the primary leg
+        type: boolean
+        default: true
+      subprojects:
+        description: JSON array of subprojects to pull, build and test; see README.md for the schema
+        type: string
+        default: ""
+      hooks-dir:
+        description: directory holding the repo's setup.sh, verify.sh and teardown.sh hooks, which is reserved for exactly those names
+        type: string
+        default: .github/ci
+      submodules:
+        description: actions/checkout submodules mode for the repo
+        type: string
+        default: "false"
+      mach-version:
+        description: published mach release to seed, empty for the family pin, or latest
+        type: string
+        default: ""
+      evidence:
+        description: paths uploaded as evidence-<leg> whatever the outcome, empty for none
+        type: string
+        default: ""
+      timeout-minutes:
+        description: default leg timeout
+        type: number
+        default: 40
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      config: ${{ steps.plan.outputs.config }}
+      any: ${{ steps.plan.outputs.any }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: repo
+          sparse-checkout: ${{ inputs.hooks-dir }}
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: toolkit
+          sparse-checkout: .github/mach-lib
+      - name: plan
+        id: plan
+        env:
+          PLAN_LEGS: ${{ inputs.legs }}
+          PLAN_EXTRA_LEGS: ${{ inputs.extra-legs }}
+          PLAN_SKIP_LEGS: ${{ inputs.skip-legs }}
+          PLAN_HEAVY: ${{ inputs.heavy }}
+          PLAN_PROFILES: ${{ inputs.profiles }}
+          PLAN_SUBPROJECTS: ${{ inputs.subprojects }}
+          PLAN_PROJECT: ${{ inputs.project }}
+          PLAN_HOOKS_DIR: ${{ inputs.hooks-dir }}
+          PLAN_TEST: ${{ inputs.test }}
+          PLAN_FMT: ${{ inputs.fmt }}
+          PLAN_ALL_TARGETS: ${{ inputs.all-targets }}
+          PLAN_TIMEOUT: ${{ inputs.timeout-minutes }}
+        run: python3 toolkit/.github/mach-lib/plan.py repo
+
+  leg:
+    name: ${{ matrix.leg.name }}
+    needs: plan
+    if: needs.plan.outputs.any == 'true'
+    runs-on: ${{ matrix.leg.runs-on }}
+    timeout-minutes: ${{ matrix.leg.timeout }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      MACH_LIB_LEG: ${{ toJSON(matrix.leg) }}
+      MACH_LIB_CONFIG: ${{ needs.plan.outputs.config }}
+      MACH_LIB_RUN: .mach-lib/.github/mach-lib/run.py
+      HOOKS_DIR: ${{ inputs.hooks-dir }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: ${{ inputs.submodules }}
+      # the toolkit is checked out at this workflow's own commit, so a caller
+      # pinned to a ref runs the actions and scripts from that same ref
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .mach-lib
+          sparse-checkout: |
+            .github/actions
+            .github/mach-lib
+      - name: apt packages
+        if: join(matrix.leg.apt, ' ') != ''
+        env:
+          PACKAGES: ${{ join(matrix.leg.apt, ' ') }}
+        run: |
+          set -euo pipefail
+          [ "$RUNNER_OS" = Linux ] || { echo "::error::leg ${{ matrix.leg.name }} asks for apt packages on $RUNNER_OS"; exit 1; }
+          sudo apt-get update
+          sudo apt-get install -y $PACKAGES
+      - name: seed
+        id: seed
+        uses: ./.mach-lib/.github/actions/seed-mach
+        with:
+          tag: ${{ inputs.mach-version }}
+      - name: environment
+        env:
+          MACH_COMPILER: ${{ steps.seed.outputs.compiler }}
+        run: |
+          echo "MACH_COMPILER=$MACH_COMPILER" >> "$GITHUB_ENV"
+          python "$MACH_LIB_RUN" env
+      - name: setup hook
+        id: setup
+        if: contains(fromJSON(needs.plan.outputs.config).hooks, 'setup.sh')
+        run: bash "$HOOKS_DIR/setup.sh"
+      - name: dependencies
+        run: python "$MACH_LIB_RUN" deps
+      - name: build
+        run: python "$MACH_LIB_RUN" build
+      - name: test
+        run: python "$MACH_LIB_RUN" test
+      - name: subprojects
+        run: python "$MACH_LIB_RUN" subprojects
+      - name: fmt
+        run: python "$MACH_LIB_RUN" fmt
+      - name: all targets
+        run: python "$MACH_LIB_RUN" all-targets
+      - name: verify hook
+        if: contains(fromJSON(needs.plan.outputs.config).hooks, 'verify.sh')
+        run: bash "$HOOKS_DIR/verify.sh"
+      # a failed step still tears down whatever setup started
+      - name: teardown hook
+        if: always() && steps.setup.conclusion != 'skipped' && contains(fromJSON(needs.plan.outputs.config).hooks, 'teardown.sh')
+        run: bash "$HOOKS_DIR/teardown.sh"
+      - name: evidence
+        if: always() && inputs.evidence != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: evidence-${{ matrix.leg.name }}
+          path: ${{ inputs.evidence }}
+          if-no-files-found: warn
+          retention-days: 14
