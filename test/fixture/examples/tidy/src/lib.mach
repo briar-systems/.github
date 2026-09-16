@@ -1,0 +1,9 @@
+# an example project, found by the subproject glob rather than listed
+
+use fixture.lib.add;
+use std.runtime;
+
+# add three integers through the fixture
+pub fun sum3(a: i64, b: i64, c: i64) i64 {
+        ret add(add(a, b), c);
+}
