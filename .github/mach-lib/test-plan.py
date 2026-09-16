@@ -138,10 +138,23 @@ class Legs(unittest.TestCase):
             'not array': {'legs': '{}'},
             'string build-args': {'legs': '[{"name": "a", "runs-on": "x", "build-args": "--pie"}]'},
             'non-string env': {'legs': '[{"name": "a", "runs-on": "x", "env": {"K": 1}}]'},
+            'compiler env': {'legs': '[{"name": "a", "runs-on": "x", "env": {"MACH_COMPILER": "/bin/true"}}]'},
+            'ci env': {'legs': '[{"name": "a", "runs-on": "x", "env": {"MACH_CI_TIER": "heavy"}}]'},
+            'lib env': {'legs': '[{"name": "a", "runs-on": "x", "env": {"MACH_LIB_HOOKS_DIR": "x"}}]'},
+            'bad env name': {'legs': '[{"name": "a", "runs-on": "x", "env": {"A=B": "c"}}]'},
+            'empty env name': {'legs': '[{"name": "a", "runs-on": "x", "env": {"": "c"}}]'},
+            'multiline env': {'legs': '[{"name": "a", "runs-on": "x", "env": {"K": "a\\nb"}}]'},
+            'carriage env': {'legs': '[{"name": "a", "runs-on": "x", "env": {"K": "a\\rb"}}]'},
         }
         for label, overrides in cases.items():
             with self.subTest(label), self.assertRaises(plan.PlanError):
                 run('main', **overrides)
+
+
+class LegEnv(unittest.TestCase):
+    def test_other_mach_names_pass(self):
+        legs, _ = run('dev', legs='[{"name": "a", "runs-on": "x", "env": {"MACH_JOBS": "2", "_x1": ""}}]')
+        self.assertEqual(legs[0]['env'], {'MACH_JOBS': '2', '_x1': ''})
 
 
 class Subprojects(unittest.TestCase):
