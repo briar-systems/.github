@@ -1,6 +1,6 @@
 # a subproject that resolves the fixture as a path dependency
 
-use fixture.lib.add;
+use   fixture.lib.add;
 use std.runtime;
 
 test "consumer: fixture resolves through its path dependency" {
