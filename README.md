@@ -96,7 +96,7 @@ Every override is an input. There is nothing to fork.
 | `project` | `.` | the project directory, for a repo whose real project is not the root |
 | `profiles` | `["debug", "release"]` | profiles to build and test. Any name works, and each leg checks that the manifests it builds declare it |
 | `test` | `true` | run `mach test` on the project |
-| `fmt` | `true` | `mach fmt --check` of the project and every subproject, in the light tier, once, on the primary leg. The plan refuses it when no light leg is configured |
+| `fmt` | `true` | `mach fmt --check` of the project and every subproject, in the light tier, once, on the primary leg |
 | `all-targets` | `true` | release build of every manifest target, once, on the primary leg |
 | `subprojects` | none | JSON array of other projects to pull, build and test |
 | `hooks-dir` | `.github/ci` | where the repo's hooks live |
@@ -121,7 +121,7 @@ A **leg** is `{"name", "runs-on"}` plus these optional keys:
 
 Before anything builds, each leg reads the manifest of the project and of every subproject it builds or tests. It fails when one declares no profile the leg uses, or no target named by the leg's `target`. A manifest the leg tests must also declare a target for the leg's host. A build-only project, such as a spirv-only shader, may target another platform. Without that check, mach falls back to a `default = true` target and the tests run a binary the host cannot execute.
 
-The primary leg is the first light leg that runs. `fmt` and `all-targets` run on that leg only.
+The plan refuses a configuration in which no light leg remains after `skip-legs`, because a pull request into `dev` would then build nothing and `gate` would still pass. The primary leg is the first light leg. `fmt` and `all-targets` run on that leg only.
 
 A **subproject** is `{"path"}` plus these optional keys. The path may be a glob such as `examples/*`. Each leg expands it, in sorted order, to every matching directory that holds a `mach.toml`, and the entry's keys apply to every match. A glob that matches no project fails the leg. The plan refuses `**`, because it would reach into `dep/` and `out/`, and it refuses a project listed twice. A new project directory is then covered without an edit to `ci.yml`.
 
