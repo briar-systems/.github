@@ -119,7 +119,7 @@ A **leg** is `{"name", "runs-on"}` plus these optional keys:
 | `test` | `true` | `false` makes the leg build-only |
 | `timeout` | `timeout-minutes` | leg timeout |
 
-Before anything builds, each leg reads the manifest of the project and of every subproject it builds or tests. It fails when one declares no target for the leg's host (or for the leg's `target`), or no profile the leg uses. Without that check, mach falls back to a `default = true` target and the tests run a binary the host cannot execute.
+Before anything builds, each leg reads the manifest of the project and of every subproject it builds or tests. It fails when one declares no profile the leg uses, or no target named by the leg's `target`. A manifest the leg tests must also declare a target for the leg's host. A build-only project, such as a spirv-only shader, may target another platform. Without that check, mach falls back to a `default = true` target and the tests run a binary the host cannot execute.
 
 The primary leg is the first light leg that runs. `fmt` and `all-targets` run on that leg only.
 

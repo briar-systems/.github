@@ -36,15 +36,16 @@ def parse_host(info):
     return {'name': fields['host'], 'isa': fields['isa'], 'os': fields['os']}
 
 
-def manifest_problems(path, manifest, leg, profiles, host):
+def manifest_problems(path, manifest, leg, profiles, host, tested):
     problems = []
     targets = manifest.get('target', {})
     if leg['target']:
         if leg['target'] not in targets:
             problems.append(path + ' declares no target ' + leg['target'] + ' for leg ' + leg['name'])
     # with no host match mach falls back to a default target, and the tests then
-    # run a binary this host cannot execute
-    elif targets and not any(t.get('isa') == host['isa'] and t.get('os') == host['os'] for t in targets.values()):
+    # run a binary this host cannot execute. a build-only project may target
+    # something else entirely, such as a spirv-only shader project.
+    elif tested and targets and not any(t.get('isa') == host['isa'] and t.get('os') == host['os'] for t in targets.values()):
         problems.append(path + ' declares no target for the host ' + host['name'] + ' of leg ' + leg['name']
                         + '; declare one, give the leg a target, or skip the leg')
     declared = manifest.get('profile', {})
@@ -55,22 +56,24 @@ def manifest_problems(path, manifest, leg, profiles, host):
 
 
 def leg_manifests(leg, config):
-    paths = [config['project']]
-    paths += [sub['path'] for sub in config['subprojects'] if applies(sub, leg) and (sub['build'] or sub['test'])]
-    return paths
+    tests = leg['test']
+    manifests = [(config['project'], tests and config['test'])]
+    manifests += [(sub['path'], tests and sub['test']) for sub in config['subprojects']
+                  if applies(sub, leg) and (sub['build'] or sub['test'])]
+    return manifests
 
 
 def check_manifests(leg, config):
     found = host()
     problems = []
-    for path in leg_manifests(leg, config):
+    for path, tested in leg_manifests(leg, config):
         manifest_path = str(Path(path) / 'mach.toml')
         with open(manifest_path, 'rb') as handle:
             manifest = tomllib.load(handle)
         profiles = list(config['profiles'])
         if path == config['project'] and leg['primary'] and config['all-targets'] and 'release' not in profiles:
             profiles.append('release')
-        problems += manifest_problems(manifest_path, manifest, leg, profiles, found)
+        problems += manifest_problems(manifest_path, manifest, leg, profiles, found, tested)
     for problem in problems:
         print('::error::' + problem)
     if problems:
