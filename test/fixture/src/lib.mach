@@ -1,0 +1,15 @@
+# the smallest library the shared ci workflow can build and test
+
+use std.runtime;
+
+# add two integers
+pub fun add(a: i64, b: i64) i64 {
+    ret a + b;
+}
+
+test "fixture.add: basic sum" {
+    if (add(2, 3) != 5) {
+        ret 1;
+    }
+    ret 0;
+}

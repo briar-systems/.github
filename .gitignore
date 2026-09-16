@@ -1,0 +1,8 @@
+.wt/
+.mach-seed/
+.mach-lib/
+.mach-txn-lock
+test/fixture/out/
+test/fixture/dep/
+test/fixture/consumer/out/
+test/fixture/consumer/dep/

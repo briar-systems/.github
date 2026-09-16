@@ -1,0 +1,87 @@
+name: CI
+
+# this repo's own pipeline is the shared library workflow run against
+# test/fixture, so every change to the workflow, the seed or the gate is
+# exercised the way a library uses it. a pull request into dev runs the light
+# legs, a pull request into main runs every leg including the qemu leg and the
+# standalone seed. nothing runs on push.
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      heavy:
+        description: heavy work to run on this ref
+        type: choice
+        default: none
+        options: [none, all, aarch64-linux, x86_64-windows, aarch64-darwin, x86_64-darwin, riscv64-linux, seed-latest]
+
+permissions:
+  contents: read
+
+jobs:
+  toolkit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: script tests
+        run: |
+          set -euo pipefail
+          python3 .github/actions/seed-mach/test-verify.py
+          python3 .github/actions/gate/test-gate.py
+          python3 .github/mach-lib/test-plan.py
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: actionlint
+        run: |
+          set -euo pipefail
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          "$(go env GOPATH)/bin/actionlint" -color
+
+  fixture:
+    uses: ./.github/workflows/mach-lib.yml
+    with:
+      heavy: ${{ inputs.heavy }}
+      project: test/fixture
+      hooks-dir: test/fixture/ci
+      extra-legs: >-
+        [{"name": "riscv64-linux", "runs-on": "ubuntu-latest", "tier": "heavy",
+          "target": "linux-riscv64", "runner": "qemu-riscv64", "apt": ["qemu-user"]}]
+      subprojects: '[{"path": "test/fixture/consumer", "clean-dep": true}]'
+      evidence: test/fixture/out/
+
+  # a caller-owned heavy job seeding directly, through the newest published
+  # release rather than the family pin
+  seed-latest:
+    if: github.base_ref == 'main' || inputs.heavy == 'all' || inputs.heavy == 'seed-latest'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: seed
+        id: seed
+        uses: ./.github/actions/seed-mach
+        with:
+          tag: latest
+      - name: report
+        env:
+          TAG: ${{ steps.seed.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mach info
+          echo "seeded $TAG"
+
+  gate:
+    if: always()
+    needs: [toolkit, fixture, seed-latest]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/actions/gate
+      - uses: ./.github/actions/gate
+        with:
+          needs: ${{ toJSON(needs) }}
