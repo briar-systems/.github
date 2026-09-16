@@ -29,7 +29,7 @@ The toolkit:
 | path | what it is |
 | --- | --- |
 | `.github/workflows/mach-lib.yml` | the reusable library pipeline (`on: workflow_call`) |
-| `.github/actions/seed-mach` | installs a published mach release after checking its archive against `SHA256SUMS`. The family pin is in `version` |
+| `.github/actions/seed-mach` | installs a published mach release after checking its archive against `SHA256SUMS`. The family pin is in `version`. Each use seeds its own directory under `$RUNNER_TEMP` and puts it first on `PATH`, so a job may seed more than once and the last seed wins |
 | `.github/actions/gate` | the gate logic |
 | `.github/mach-lib` | the plan and leg scripts the workflow runs, with their tests |
 | `test/fixture` | the library this repo's own `ci.yml` runs the workflow against |
