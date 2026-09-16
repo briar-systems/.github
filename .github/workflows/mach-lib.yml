@@ -25,6 +25,10 @@ on:
         description: JSON array of leg names to drop
         type: string
         default: ""
+      light-legs:
+        description: JSON array of leg names to run in the light tier whatever their declared tier
+        type: string
+        default: ""
       project:
         description: directory of the project to build and test
         type: string
@@ -98,6 +102,7 @@ jobs:
           PLAN_LEGS: ${{ inputs.legs }}
           PLAN_EXTRA_LEGS: ${{ inputs.extra-legs }}
           PLAN_SKIP_LEGS: ${{ inputs.skip-legs }}
+          PLAN_LIGHT_LEGS: ${{ inputs.light-legs }}
           PLAN_HEAVY: ${{ inputs.heavy }}
           PLAN_PROFILES: ${{ inputs.profiles }}
           PLAN_SUBPROJECTS: ${{ inputs.subprojects }}

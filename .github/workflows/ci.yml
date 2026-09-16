@@ -3,8 +3,8 @@ name: CI
 # this repo's own pipeline is the shared library workflow run against
 # test/fixture, so every change to the workflow, the seed or the gate is
 # exercised the way a library uses it. a pull request into dev runs the light
-# legs, a pull request into main runs every leg including the qemu leg and the
-# standalone seed. nothing runs on push.
+# legs, x86_64-linux and the promoted aarch64-linux, and a pull request into
+# main runs every leg including the qemu leg and the standalone seed. nothing runs on push.
 
 on:
   pull_request:
@@ -46,6 +46,7 @@ jobs:
       heavy: ${{ inputs.heavy }}
       project: test/fixture
       hooks-dir: test/fixture/ci
+      light-legs: '["aarch64-linux"]'
       extra-legs: >-
         [{"name": "riscv64-linux", "runs-on": "ubuntu-latest", "tier": "heavy",
           "target": "linux-riscv64", "runner": "qemu-riscv64", "test-args": ["--jobs", "1"],
