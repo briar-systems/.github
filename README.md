@@ -82,7 +82,7 @@ Every override is an input. There is nothing to fork.
 | `project` | `.` | the project directory, for a repo whose real project is not the root |
 | `profiles` | `["debug", "release"]` | profiles to build and test |
 | `test` | `true` | run `mach test` on the project |
-| `fmt` | `true` | `mach fmt --check`, once, on the primary leg |
+| `fmt` | `true` | `mach fmt --check` in the light tier, once, on the primary leg. The plan refuses it when no light leg is configured |
 | `all-targets` | `true` | release build of every manifest target, once, on the primary leg |
 | `subprojects` | none | JSON array of other projects to pull, build and test |
 | `hooks-dir` | `.github/ci` | where the repo's hooks live |

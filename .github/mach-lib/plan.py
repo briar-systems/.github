@@ -164,6 +164,10 @@ def plan(inputs, base_ref, root):
     tier = 'heavy' if full else 'light'
     heavy = 'all' if full else ','.join(selection)
 
+    # fmt belongs to the light tier, so it needs a light leg to run on
+    if inputs['fmt'] and not any(leg['tier'] == 'light' and leg['name'] not in skip for leg in legs):
+        raise PlanError('fmt is on but no light leg runs it; add a light leg or set fmt: false')
+
     included = [leg for leg in legs if leg['name'] not in skip and
                 (leg['tier'] == 'light' or full or leg['name'] in selection)]
     primary = next((leg['name'] for leg in included if leg['tier'] == 'light'),

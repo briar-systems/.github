@@ -67,8 +67,17 @@ class Tiers(unittest.TestCase):
         legs, _ = run('main')
         self.assertEqual([leg['name'] for leg in legs if leg['primary']], ['x86_64-linux'])
 
+    def test_fmt_runs_on_the_light_tier(self):
+        legs, config = run('dev')
+        self.assertTrue(config['fmt'])
+        self.assertEqual([leg['name'] for leg in legs if leg['primary']], ['x86_64-linux'])
+
+    def test_fmt_without_a_light_leg_is_refused(self):
+        with self.assertRaises(plan.PlanError):
+            run('main', **{'skip-legs': '["x86_64-linux"]'})
+
     def test_primary_falls_to_first_leg_when_no_light_leg_runs(self):
-        legs, _ = run('main', **{'skip-legs': '["x86_64-linux"]'})
+        legs, _ = run('main', fmt=False, **{'skip-legs': '["x86_64-linux"]'})
         self.assertEqual([leg['name'] for leg in legs if leg['primary']], ['aarch64-linux'])
 
 
@@ -92,7 +101,7 @@ class Legs(unittest.TestCase):
         self.assertNotIn('x86_64-windows', [leg['name'] for leg in legs])
 
     def test_every_leg_skipped_is_an_empty_matrix(self):
-        legs, _ = run('dev', **{'skip-legs': '["x86_64-linux"]'})
+        legs, _ = run('dev', fmt=False, **{'skip-legs': '["x86_64-linux"]'})
         self.assertEqual(legs, [])
 
     def test_refusals(self):
