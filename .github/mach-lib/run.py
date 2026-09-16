@@ -96,8 +96,9 @@ def expand_subprojects(subprojects, root='.'):
         if not GLOB.search(sub['path']):
             expanded.append(sub)
             continue
-        # a directory without a manifest is not a project, whatever the glob says
-        matches = sorted(os.path.relpath(match, root) for match in Path(root).glob(sub['path'])
+        # a directory without a manifest is not a project, whatever the glob says.
+        # posix separators keep every host's paths comparable with the literal ones.
+        matches = sorted(match.relative_to(root).as_posix() for match in Path(root).glob(sub['path'])
                          if (match / 'mach.toml').is_file())
         if not matches:
             raise ExpandError('subproject glob ' + sub['path'] + ' matches no directory holding a mach.toml')

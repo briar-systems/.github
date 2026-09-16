@@ -41,6 +41,25 @@ jobs:
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           "$(go env GOPATH)/bin/actionlint" -color
 
+  # the seed and leg scripts also run on windows and darwin legs, where paths
+  # and interpreters differ, so their tests run there too
+  host-scripts:
+    name: host-scripts ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-15]
+    steps:
+      - uses: actions/checkout@v6
+      - name: script tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python .github/actions/seed-mach/test-verify.py
+          python .github/mach-lib/test-run.py
+
   fixture:
     uses: ./.github/workflows/mach-lib.yml
     with:
@@ -81,7 +100,7 @@ jobs:
 
   gate:
     if: always()
-    needs: [toolkit, fixture, seed-latest]
+    needs: [toolkit, host-scripts, fixture, seed-latest]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
