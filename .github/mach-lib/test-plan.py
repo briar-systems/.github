@@ -14,6 +14,7 @@ def inputs(**overrides):
         'legs': json.dumps(plan.DEFAULT_LEGS),
         'extra-legs': '[]',
         'skip-legs': '[]',
+        'light-legs': '[]',
         'heavy': '',
         'profiles': '["debug", "release"]',
         'subprojects': '[]',
@@ -96,6 +97,16 @@ class Legs(unittest.TestCase):
         legs, _ = run('main', legs='[{"name": "spirv", "runs-on": "ubuntu-latest", "target": "spirv", "test": false}]')
         self.assertEqual([(leg['name'], leg['test'], leg['timeout']) for leg in legs], [('spirv', False, 40)])
 
+    def test_light_legs_promote_default_legs(self):
+        legs, _ = run('dev', **{'light-legs': '["x86_64-windows", "aarch64-darwin"]'})
+        self.assertEqual([(leg['name'], leg['run-tier'], leg['primary']) for leg in legs],
+                         [('x86_64-linux', 'light', True), ('x86_64-windows', 'light', False),
+                          ('aarch64-darwin', 'light', False)])
+
+    def test_promoted_legs_run_heavy_into_main(self):
+        legs, _ = run('main', **{'light-legs': '["x86_64-windows"]'})
+        self.assertTrue(all(leg['run-tier'] == 'heavy' for leg in legs))
+
     def test_skip_removes_a_leg(self):
         legs, _ = run('main', **{'skip-legs': '["x86_64-windows"]'})
         self.assertNotIn('x86_64-windows', [leg['name'] for leg in legs])
@@ -115,6 +126,8 @@ class Legs(unittest.TestCase):
             'bad name': {'legs': '[{"name": "A B", "runs-on": "x"}]'},
             'duplicate': {'extra-legs': '[{"name": "x86_64-linux", "runs-on": "x"}]'},
             'unknown skip': {'skip-legs': '["x86_64-linx"]'},
+            'unknown light': {'light-legs': '["x86_64-windws"]'},
+            'non-string light': {'light-legs': '[1]'},
             'unknown profile': {'profiles': '["debug", "fast"]'},
             'not json': {'legs': '[{name: a}]'},
             'not array': {'legs': '{}'},
