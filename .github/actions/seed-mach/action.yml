@@ -45,38 +45,43 @@ runs:
           latest) RELEASE_TAG=; release=latest ;;
           *) release="tags/$RELEASE_TAG" ;;
         esac
-        mkdir .mach-seed
-        gh api "repos/briar-systems/mach/releases/$release" > .mach-seed/release.json
-        python "$ACTION_PATH/verify.py" resolve .mach-seed/release.json "$RELEASE_TAG" "$host" "$ext"
+        # each invocation seeds its own directory outside the workspace
+        dir=$(mktemp -d "$RUNNER_TEMP/mach-seed.XXXXXX")
+        echo "dir=$dir" >> "$GITHUB_OUTPUT"
+        gh api "repos/briar-systems/mach/releases/$release" > "$dir/release.json"
+        python "$ACTION_PATH/verify.py" resolve "$dir/release.json" "$RELEASE_TAG" "$host" "$ext"
     - name: download and verify archive before extraction
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
         TAG: ${{ steps.resolve.outputs.tag }}
         ASSET: ${{ steps.resolve.outputs.asset }}
+        SEED_DIR: ${{ steps.resolve.outputs.dir }}
         ACTION_PATH: ${{ github.action_path }}
       run: |
         set -euo pipefail
-        gh release download "$TAG" -R briar-systems/mach -p "$ASSET" -p SHA256SUMS -D .mach-seed
-        python "$ACTION_PATH/verify.py" archive ".mach-seed/$ASSET" .mach-seed/SHA256SUMS
+        gh release download "$TAG" -R briar-systems/mach -p "$ASSET" -p SHA256SUMS -D "$SEED_DIR"
+        python "$ACTION_PATH/verify.py" archive "$SEED_DIR/$ASSET" "$SEED_DIR/SHA256SUMS"
     - name: install native seed
       if: runner.os != 'Windows'
       shell: bash
       env:
         ASSET: ${{ steps.resolve.outputs.asset }}
+        SEED_DIR: ${{ steps.resolve.outputs.dir }}
       run: |
         set -euo pipefail
-        tar -xzf ".mach-seed/$ASSET" -C .mach-seed mach
-        chmod +x .mach-seed/mach
-        echo "$PWD/.mach-seed" >> "$GITHUB_PATH"
+        tar -xzf "$SEED_DIR/$ASSET" -C "$SEED_DIR" mach
+        chmod +x "$SEED_DIR/mach"
+        echo "$SEED_DIR" >> "$GITHUB_PATH"
     - name: install native seed
       if: runner.os == 'Windows'
       shell: pwsh
       env:
         ASSET: ${{ steps.resolve.outputs.asset }}
+        SEED_DIR: ${{ steps.resolve.outputs.dir }}
       run: |
         $ErrorActionPreference = 'Stop'
-        $dir = Join-Path $PWD '.mach-seed'
+        $dir = $env:SEED_DIR
         Expand-Archive -Path (Join-Path $dir $env:ASSET) -DestinationPath $dir
         Add-Content -Path $env:GITHUB_PATH -Value $dir
     - name: verify installed version and record provenance
@@ -85,5 +90,6 @@ runs:
       env:
         TAG: ${{ steps.resolve.outputs.tag }}
         ASSET: ${{ steps.resolve.outputs.asset }}
+        SEED_DIR: ${{ steps.resolve.outputs.dir }}
         ACTION_PATH: ${{ github.action_path }}
-      run: python "$ACTION_PATH/verify.py" installed .mach-seed "$TAG" "$ASSET"
+      run: python "$ACTION_PATH/verify.py" installed "$SEED_DIR" "$TAG" "$ASSET"
