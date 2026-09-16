@@ -166,6 +166,8 @@ jobs:
         run: |
           echo "MACH_COMPILER=$MACH_COMPILER" >> "$GITHUB_ENV"
           python "$MACH_LIB_RUN" env
+      - name: manifests
+        run: python "$MACH_LIB_RUN" manifests
       - name: setup hook
         id: setup
         if: contains(fromJSON(needs.plan.outputs.config).hooks, 'setup.sh')

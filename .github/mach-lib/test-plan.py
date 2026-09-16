@@ -107,6 +107,10 @@ class Legs(unittest.TestCase):
         legs, _ = run('main', **{'light-legs': '["x86_64-windows"]'})
         self.assertTrue(all(leg['run-tier'] == 'heavy' for leg in legs))
 
+    def test_any_named_profile_passes_the_plan(self):
+        _, config = run('dev', profiles='["debug", "release", "reassoc"]')
+        self.assertEqual(config['profiles'], ['debug', 'release', 'reassoc'])
+
     def test_skip_removes_a_leg(self):
         legs, _ = run('main', **{'skip-legs': '["x86_64-windows"]'})
         self.assertNotIn('x86_64-windows', [leg['name'] for leg in legs])
@@ -128,7 +132,8 @@ class Legs(unittest.TestCase):
             'unknown skip': {'skip-legs': '["x86_64-linx"]'},
             'unknown light': {'light-legs': '["x86_64-windws"]'},
             'non-string light': {'light-legs': '[1]'},
-            'unknown profile': {'profiles': '["debug", "fast"]'},
+            'empty profiles': {'profiles': '[]'},
+            'bad profile name': {'profiles': '["debug", "Fast Math"]'},
             'not json': {'legs': '[{name: a}]'},
             'not array': {'legs': '{}'},
             'string build-args': {'legs': '[{"name": "a", "runs-on": "x", "build-args": "--pie"}]'},
@@ -144,7 +149,11 @@ class Subprojects(unittest.TestCase):
         _, config = run('dev', subprojects='[{"path": "test/acme"}]')
         self.assertEqual(config['subprojects'], [{
             'path': 'test/acme', 'pull': True, 'build': False, 'test': True,
-            'clean-dep': False, 'jobs': 0, 'legs': [], 'tier': 'light'}])
+            'fmt': True, 'clean-dep': False, 'jobs': 0, 'legs': [], 'tier': 'light'}])
+
+    def test_fmt_opt_out(self):
+        _, config = run('dev', subprojects='[{"path": "a", "fmt": false}]')
+        self.assertFalse(config['subprojects'][0]['fmt'])
 
     def test_refusals(self):
         cases = {
@@ -152,6 +161,7 @@ class Subprojects(unittest.TestCase):
             'unknown key': '[{"path": "a", "clean": true}]',
             'test without pull': '[{"path": "a", "pull": false}]',
             'bad tier': '[{"path": "a", "tier": "medium"}]',
+            'string fmt': '[{"path": "a", "fmt": "no"}]',
             'missing path': '[{"test": true}]',
         }
         for label, subprojects in cases.items():

@@ -31,6 +31,7 @@ jobs:
           python3 .github/actions/seed-mach/test-verify.py
           python3 .github/actions/gate/test-gate.py
           python3 .github/mach-lib/test-plan.py
+          python3 .github/mach-lib/test-run.py
       - uses: actions/setup-go@v5
         with:
           go-version: stable
@@ -46,6 +47,7 @@ jobs:
       heavy: ${{ inputs.heavy }}
       project: test/fixture
       hooks-dir: test/fixture/ci
+      profiles: '["debug", "release", "fast"]'
       light-legs: '["aarch64-linux"]'
       extra-legs: >-
         [{"name": "riscv64-linux", "runs-on": "ubuntu-latest", "tier": "heavy",

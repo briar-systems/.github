@@ -16,7 +16,6 @@ DEFAULT_LEGS = [
 
 HOOKS = ('setup.sh', 'verify.sh', 'teardown.sh')
 TIERS = ('light', 'heavy')
-PROFILES = ('debug', 'release')
 NAME = re.compile(r'[a-z0-9][a-z0-9_-]*')
 
 
@@ -97,19 +96,20 @@ def normalize_leg(entry, timeout):
 def normalize_subproject(entry, legs):
     kind = 'subproject'
     check_keys(kind, entry, ('path',),
-               ('pull', 'build', 'test', 'clean-dep', 'jobs', 'legs', 'tier'))
+               ('pull', 'build', 'test', 'fmt', 'clean-dep', 'jobs', 'legs', 'tier'))
     sub = {
         'path': entry['path'],
         'pull': entry.get('pull', True),
         'build': entry.get('build', False),
         'test': entry.get('test', True),
+        'fmt': entry.get('fmt', True),
         'clean-dep': entry.get('clean-dep', False),
         'jobs': entry.get('jobs', 0),
         'legs': string_list(kind, 'legs', entry.get('legs', [])),
         'tier': entry.get('tier', 'light'),
     }
     check_type(kind, 'path', sub['path'], str)
-    for key in ('pull', 'build', 'test', 'clean-dep'):
+    for key in ('pull', 'build', 'test', 'fmt', 'clean-dep'):
         check_type(kind, key, sub[key], bool)
     check_type(kind, 'jobs', sub['jobs'], int)
     check_type(kind, 'tier', sub['tier'], str)
@@ -155,10 +155,13 @@ def plan(inputs, base_ref, root):
         if leg['name'] in light:
             leg['tier'] = 'light'
 
+    # the manifests decide which profiles exist, and each leg checks them there
     profiles = string_list('input', 'profiles', parse_list(inputs['profiles'], 'profiles'))
+    if not profiles:
+        raise PlanError('profiles is empty')
     for profile in profiles:
-        if profile not in PROFILES:
-            raise PlanError('unknown profile ' + profile)
+        if not NAME.fullmatch(profile):
+            raise PlanError('profile name ' + json.dumps(profile) + ' must be lowercase letters, digits, underscores and dashes')
     subprojects = [normalize_subproject(entry, set(names))
                    for entry in parse_list(inputs['subprojects'], 'subprojects')]
 
