@@ -1,0 +1,24 @@
+# what the adopter preflight checks, as data. see README.md in this directory.
+
+org = "briar-systems"
+# the branch every adopter's ci.yml is read from and cloned at
+branch = "dev"
+
+# adopters left out by ruling, with the reason
+[exclude]
+mach-mqtt = "red by design (delegator ruling 2026-09-16)"
+mach-mdns = "red by design (delegator ruling 2026-09-16)"
+
+# repos whose primary leg is also run end to end, hooks included
+[sample]
+repos = ["mach-std", "hedge", "boom", "mach-glfw", "mach-tls"]
+
+# what each runs-on label is, so the manifests check knows the host of a leg
+# that does not run here
+[hosts]
+"ubuntu-latest" = { isa = "x86_64", os = "linux" }
+"ubuntu-24.04" = { isa = "x86_64", os = "linux" }
+"ubuntu-24.04-arm" = { isa = "aarch64", os = "linux" }
+"windows-latest" = { isa = "x86_64", os = "windows" }
+"macos-15" = { isa = "aarch64", os = "darwin" }
+"macos-15-intel" = { isa = "x86_64", os = "darwin" }

@@ -34,6 +34,7 @@ The toolkit:
 | `.github/actions/gate` | the gate logic |
 | `.github/mach-lib` | the plan and leg scripts the workflow runs, with their tests |
 | `test/fixture` | the library this repo's own `ci.yml` runs the workflow against |
+| `tools/preflight` | the adopter preflight run before every release. It is not part of the caller contract |
 
 ### Why the caller owns `gate`
 
@@ -282,4 +283,4 @@ esac
 
 Callers reference the workflow and the gate and seed actions at `@main`. A toolkit change lands on `dev` first, and this repo's `dev` to `main` pull request, which runs every leg, is its release gate. The workflow checks out its actions and scripts at its own commit, so one caller ref pins all of them together. The mach seed pin is `.github/actions/seed-mach/version`. Bumping it is one pull request here, and it moves every caller that has not set `mach-version`.
 
-Because every caller follows `main`, the toolkit has no version tags. A release is the `dev` to `main` pull request, and the org-wide note in CONTRIBUTING about tagging releases does not apply to this repo. Before that pull request merges, every adopter's `dev` is preflighted against the change.
+Because every caller follows `main`, the toolkit has no version tags. A release is the `dev` to `main` pull request, and the org-wide note in CONTRIBUTING about tagging releases does not apply to this repo. Before that pull request merges, every adopter's `dev` is preflighted against the change with [`tools/preflight`](tools/preflight/README.md).
