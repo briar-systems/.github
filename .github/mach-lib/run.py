@@ -128,8 +128,6 @@ def export_env(leg, config):
     })
     with open(os.environ['GITHUB_ENV'], 'a') as output:
         for key, value in values.items():
-            if '\n' in value:
-                raise ValueError('leg env ' + key + ' spans lines')
             output.write(key + '=' + value + '\n')
             print(key + '=' + value)
     mach('info')

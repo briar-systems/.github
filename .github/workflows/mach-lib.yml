@@ -84,7 +84,6 @@ jobs:
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       config: ${{ steps.plan.outputs.config }}
-      any: ${{ steps.plan.outputs.any }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -117,7 +116,6 @@ jobs:
   leg:
     name: ${{ matrix.leg.name }}
     needs: plan
-    if: needs.plan.outputs.any == 'true'
     runs-on: ${{ matrix.leg.runs-on }}
     timeout-minutes: ${{ matrix.leg.timeout }}
     strategy:
@@ -127,7 +125,7 @@ jobs:
       MACH_LIB_LEG: ${{ toJSON(matrix.leg) }}
       MACH_LIB_CONFIG: ${{ needs.plan.outputs.config }}
       MACH_LIB_RUN: .mach-lib/.github/mach-lib/run.py
-      HOOKS_DIR: ${{ inputs.hooks-dir }}
+      MACH_LIB_HOOKS_DIR: ${{ inputs.hooks-dir }}
     defaults:
       run:
         shell: bash
@@ -171,7 +169,7 @@ jobs:
       - name: setup hook
         id: setup
         if: contains(fromJSON(needs.plan.outputs.config).hooks, 'setup.sh')
-        run: bash "$HOOKS_DIR/setup.sh"
+        run: bash "$MACH_LIB_HOOKS_DIR/setup.sh"
       - name: dependencies
         run: python "$MACH_LIB_RUN" deps
       - name: build
@@ -186,11 +184,11 @@ jobs:
         run: python "$MACH_LIB_RUN" all-targets
       - name: verify hook
         if: contains(fromJSON(needs.plan.outputs.config).hooks, 'verify.sh')
-        run: bash "$HOOKS_DIR/verify.sh"
+        run: bash "$MACH_LIB_HOOKS_DIR/verify.sh"
       # a failed step still tears down whatever setup started
       - name: teardown hook
         if: always() && steps.setup.conclusion != 'skipped' && contains(fromJSON(needs.plan.outputs.config).hooks, 'teardown.sh')
-        run: bash "$HOOKS_DIR/teardown.sh"
+        run: bash "$MACH_LIB_HOOKS_DIR/teardown.sh"
       - name: evidence
         if: always() && inputs.evidence != ''
         uses: actions/upload-artifact@v7

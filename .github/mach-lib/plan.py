@@ -17,6 +17,9 @@ DEFAULT_LEGS = [
 HOOKS = ('setup.sh', 'verify.sh', 'teardown.sh')
 TIERS = ('light', 'heavy')
 NAME = re.compile(r'[a-z0-9][a-z0-9_-]*')
+ENV_NAME = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
+# the variables the workflow and run.py set; a leg env must not replace them
+RESERVED_ENV = re.compile(r'MACH_COMPILER|MACH_CI_.*|MACH_LIB_.*')
 
 
 class PlanError(ValueError):
@@ -82,8 +85,14 @@ def normalize_leg(entry, timeout):
     for key in ('tier', 'target', 'runner'):
         check_type(kind, key, leg[key], str)
     check_type(kind, 'env', leg['env'], dict)
-    for value in leg['env'].values():
+    for key, value in leg['env'].items():
         check_type(kind, 'env', value, str)
+        if not ENV_NAME.fullmatch(key):
+            raise PlanError('leg ' + leg['name'] + ' env name ' + json.dumps(key) + ' is not a shell variable name')
+        if RESERVED_ENV.fullmatch(key):
+            raise PlanError('leg ' + leg['name'] + ' env sets ' + key + ', which the toolkit owns')
+        if '\n' in value or '\r' in value:
+            raise PlanError('leg ' + leg['name'] + ' env ' + key + ' spans lines')
     check_type(kind, 'test', leg['test'], bool)
     check_type(kind, 'timeout', leg['timeout'], int)
     if leg['tier'] not in TIERS:
@@ -180,14 +189,16 @@ def plan(inputs, base_ref, root):
     tier = 'heavy' if full else 'light'
     heavy = 'all' if full else ','.join(selection)
 
-    # fmt belongs to the light tier, so it needs a light leg to run on
-    if inputs['fmt'] and not any(leg['tier'] == 'light' and leg['name'] not in skip for leg in legs):
-        raise PlanError('fmt is on but no light leg runs it; add a light leg or set fmt: false')
+    # a pull request into dev runs only light legs, so without one it would build
+    # nothing and gate would pass. the primary leg, and with it fmt and
+    # all-targets, is always a light leg
+    if not any(leg['tier'] == 'light' and leg['name'] not in skip for leg in legs):
+        raise PlanError('no light leg runs, so a pull request into dev would build nothing; '
+                        'add a light leg, promote one with light-legs, or skip fewer legs')
 
     included = [leg for leg in legs if leg['name'] not in skip and
                 (leg['tier'] == 'light' or full or leg['name'] in selection)]
-    primary = next((leg['name'] for leg in included if leg['tier'] == 'light'),
-                   included[0]['name'] if included else '')
+    primary = next(leg['name'] for leg in included if leg['tier'] == 'light')
     for leg in included:
         leg['primary'] = leg['name'] == primary
         leg['run-tier'] = 'heavy' if full or leg['name'] in selection else 'light'
@@ -239,7 +250,6 @@ def main():
     with open(env['GITHUB_OUTPUT'], 'a') as output:
         output.write('matrix=' + json.dumps(matrix) + '\n')
         output.write('config=' + json.dumps(config) + '\n')
-        output.write('any=' + ('true' if matrix['include'] else 'false') + '\n')
 
 
 if __name__ == '__main__':
