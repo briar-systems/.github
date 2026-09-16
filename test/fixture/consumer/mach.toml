@@ -49,6 +49,14 @@ simd  = "scalarize"
 vectorize     = true
 float_reassoc = false
 
+# a third profile, since the manifest and not the toolkit decides which exist
+[profile.fast]
+opt   = 2
+debug = false
+simd  = "scalarize"
+vectorize     = true
+float_reassoc = false
+
 [artifact.consumer]
 kind    = "static"
 entry   = "lib.mach"
