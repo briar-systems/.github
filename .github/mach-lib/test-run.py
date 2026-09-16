@@ -109,6 +109,11 @@ class Expand(unittest.TestCase):
         self.assertEqual([x['path'] for x in expanded], ['examples/alpha', 'examples/mid', 'examples/zeta'])
         self.assertTrue(all(x['jobs'] == 2 and x['build'] and not x['test'] for x in expanded))
 
+    def test_matches_use_posix_separators(self):
+        # a windows path would reach mach and the duplicate check with backslashes
+        expanded = self.expand(sub('examples/*'))
+        self.assertTrue(all('\\' not in x['path'] and x['path'].count('/') == 1 for x in expanded))
+
     def test_literal_paths_pass_through_in_order(self):
         expanded = self.expand(sub('tools'), sub('examples/m*'))
         self.assertEqual([x['path'] for x in expanded], ['tools', 'examples/mid'])
