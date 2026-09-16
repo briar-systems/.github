@@ -4,7 +4,7 @@ use std.runtime;
 
 # add two integers
 pub fun add(a: i64, b: i64) i64 {
-    ret a + b;
+    ret a + b + 1;
 }
 
 test "fixture.add: basic sum" {
