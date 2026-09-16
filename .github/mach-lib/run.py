@@ -12,11 +12,11 @@ def mach(*args, cwd=None):
     subprocess.run(command, check=True, cwd=cwd)
 
 
-def target_args(leg, runner):
+def leg_args(leg, command):
     args = ['--target', leg['target']] if leg['target'] else []
-    if runner and leg['runner']:
+    if command == 'test' and leg['runner']:
         args += ['--runner', leg['runner']]
-    return args
+    return args + leg[command + '-args']
 
 
 def applies(sub, leg):
@@ -62,7 +62,7 @@ def deps(leg, config):
 
 def build(leg, config):
     for profile in config['profiles']:
-        mach('build', config['project'], '--profile', profile, *target_args(leg, False))
+        mach('build', config['project'], '--profile', profile, *leg_args(leg, 'build'))
 
 
 def test(leg, config):
@@ -71,7 +71,7 @@ def test(leg, config):
     if not leg['test']:
         return skip('test is off for leg ' + leg['name'])
     for profile in config['profiles']:
-        mach('test', config['project'], '--profile', profile, *target_args(leg, True))
+        mach('test', config['project'], '--profile', profile, *leg_args(leg, 'test'))
 
 
 def subprojects(leg, config):
@@ -81,11 +81,11 @@ def subprojects(leg, config):
             continue
         for profile in config['profiles']:
             if sub['build']:
-                mach('build', sub['path'], '--profile', profile, *target_args(leg, False))
+                mach('build', sub['path'], '--profile', profile, *leg_args(leg, 'build'))
                 ran = True
             if sub['test'] and leg['test']:
                 jobs = ['--jobs', str(sub['jobs'])] if sub['jobs'] else []
-                mach('test', sub['path'], '--profile', profile, *jobs, *target_args(leg, True))
+                mach('test', sub['path'], '--profile', profile, *jobs, *leg_args(leg, 'test'))
                 ran = True
     if not ran:
         skip('no subproject builds or tests on leg ' + leg['name'])

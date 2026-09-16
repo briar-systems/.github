@@ -62,7 +62,7 @@ def parse_list(text, name):
 def normalize_leg(entry, timeout):
     kind = 'leg'
     check_keys(kind, entry, ('name', 'runs-on'),
-               ('tier', 'target', 'runner', 'apt', 'env', 'test', 'timeout'))
+               ('tier', 'target', 'runner', 'build-args', 'test-args', 'apt', 'env', 'test', 'timeout'))
     check_type(kind, 'name', entry['name'], str)
     if not NAME.fullmatch(entry['name']):
         raise PlanError('leg name ' + entry['name'] + ' must be lowercase letters, digits, underscores and dashes')
@@ -72,6 +72,8 @@ def normalize_leg(entry, timeout):
         'tier': entry.get('tier', 'light'),
         'target': entry.get('target', ''),
         'runner': entry.get('runner', ''),
+        'build-args': string_list(kind, 'build-args', entry.get('build-args', [])),
+        'test-args': string_list(kind, 'test-args', entry.get('test-args', [])),
         'apt': string_list(kind, 'apt', entry.get('apt', [])),
         'env': entry.get('env', {}),
         'test': entry.get('test', True),

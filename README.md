@@ -98,6 +98,8 @@ A **leg** is `{"name", "runs-on"}` plus these optional keys:
 | `tier` | `light` | `light` or `heavy` |
 | `target` | host | passed as `--target` to build and test |
 | `runner` | none | passed as `--runner` to test. Requires `target` |
+| `build-args` | none | string array appended to every build on the leg, including subproject builds |
+| `test-args` | none | string array appended to every test on the leg, including subproject tests |
 | `apt` | none | packages installed first. Linux legs only |
 | `env` | none | string map exported to every step |
 | `test` | `true` | `false` makes the leg build-only |

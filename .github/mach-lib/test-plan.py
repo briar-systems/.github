@@ -79,6 +79,10 @@ class Legs(unittest.TestCase):
         self.assertEqual(legs[-1]['runner'], 'qemu-riscv64')
         self.assertEqual(legs[-1]['apt'], ['qemu-user'])
 
+    def test_extra_args_are_kept_per_command(self):
+        legs, _ = run('main', legs='[{"name": "darwin", "runs-on": "macos-15-intel", "build-args": ["--pie"]}]')
+        self.assertEqual((legs[0]['build-args'], legs[0]['test-args']), (['--pie'], []))
+
     def test_legs_replace_the_defaults(self):
         legs, _ = run('main', legs='[{"name": "spirv", "runs-on": "ubuntu-latest", "target": "spirv", "test": false}]')
         self.assertEqual([(leg['name'], leg['test'], leg['timeout']) for leg in legs], [('spirv', False, 40)])
@@ -105,6 +109,7 @@ class Legs(unittest.TestCase):
             'unknown profile': {'profiles': '["debug", "fast"]'},
             'not json': {'legs': '[{name: a}]'},
             'not array': {'legs': '{}'},
+            'string build-args': {'legs': '[{"name": "a", "runs-on": "x", "build-args": "--pie"}]'},
             'non-string env': {'legs': '[{"name": "a", "runs-on": "x", "env": {"K": 1}}]'},
         }
         for label, overrides in cases.items():

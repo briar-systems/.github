@@ -48,7 +48,8 @@ jobs:
       hooks-dir: test/fixture/ci
       extra-legs: >-
         [{"name": "riscv64-linux", "runs-on": "ubuntu-latest", "tier": "heavy",
-          "target": "linux-riscv64", "runner": "qemu-riscv64", "apt": ["qemu-user"]}]
+          "target": "linux-riscv64", "runner": "qemu-riscv64", "test-args": ["--jobs", "1"],
+          "apt": ["qemu-user"]}]
       subprojects: '[{"path": "test/fixture/consumer", "clean-dep": true}]'
       evidence: test/fixture/out/
 
