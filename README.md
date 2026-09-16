@@ -22,6 +22,7 @@ Per-repo light sets (ruled 2026-09-16):
 | --- | --- | --- |
 | mach-std | `x86_64-linux`, `x86_64-windows`, `aarch64-darwin` | `light-legs: '["x86_64-windows", "aarch64-darwin"]'` |
 | mach-lsp | `x86_64-linux`, `x86_64-windows` | `light-legs: '["x86_64-windows"]'` |
+| .github | `x86_64-linux`, `aarch64-linux` | `light-legs: '["aarch64-linux"]'`, a self-test of the `light-legs` input |
 | every other repo | `x86_64-linux` | none |
 
 The toolkit:
@@ -29,7 +30,7 @@ The toolkit:
 | path | what it is |
 | --- | --- |
 | `.github/workflows/mach-lib.yml` | the reusable library pipeline (`on: workflow_call`) |
-| `.github/actions/seed-mach` | installs a published mach release after checking its archive against `SHA256SUMS`. The family pin is in `version` |
+| `.github/actions/seed-mach` | installs a published mach release after checking its archive against `SHA256SUMS`. The family pin is in `version`. Each use seeds its own directory under `$RUNNER_TEMP` and puts it first on `PATH`, so a job may seed more than once and the last seed wins |
 | `.github/actions/gate` | the gate logic |
 | `.github/mach-lib` | the plan and leg scripts the workflow runs, with their tests |
 | `test/fixture` | the library this repo's own `ci.yml` runs the workflow against |
@@ -82,6 +83,13 @@ With no other inputs, a pull request into `dev` runs these steps on `x86_64-linu
 
 A pull request into `main` adds native `aarch64-linux`, `x86_64-windows`, `aarch64-darwin` and `x86_64-darwin` legs.
 
+### Caller requirements
+
+- the caller grants `permissions: contents: read`. The gate reads its own workflow file and the seed reads mach releases through `github.token`, so `permissions: {}` breaks both
+- every leg's runner provides Python 3.11 or newer as `python`, because the leg scripts use `tomllib`. The hosted images do. A custom `runs-on` has to provide it as well
+- the `gate` job runs on `ubuntu-latest`, or on another runner where `python` can import PyYAML
+- the leg job checks the toolkit out to `.mach-lib/` inside the workspace. The seed goes under `$RUNNER_TEMP` and never lands in the workspace
+
 ### Override surface
 
 Every override is an input. There is nothing to fork.
@@ -96,7 +104,7 @@ Every override is an input. There is nothing to fork.
 | `project` | `.` | the project directory, for a repo whose real project is not the root |
 | `profiles` | `["debug", "release"]` | profiles to build and test. Any name works, and each leg checks that the manifests it builds declare it |
 | `test` | `true` | run `mach test` on the project |
-| `fmt` | `true` | `mach fmt --check` of the project and every subproject, in the light tier, once, on the primary leg. The plan refuses it when no light leg is configured |
+| `fmt` | `true` | `mach fmt --check` of the project and every subproject, in the light tier, once, on the primary leg |
 | `all-targets` | `true` | release build of every manifest target, once, on the primary leg |
 | `subprojects` | none | JSON array of other projects to pull, build and test |
 | `hooks-dir` | `.github/ci` | where the repo's hooks live |
@@ -115,13 +123,13 @@ A **leg** is `{"name", "runs-on"}` plus these optional keys:
 | `build-args` | none | string array appended to every build on the leg, including subproject builds |
 | `test-args` | none | string array appended to every test on the leg, including subproject tests |
 | `apt` | none | packages installed first. Linux legs only |
-| `env` | none | string map exported to every step |
+| `env` | none | string map exported to every step. Names must be shell variable names, values one line, and `MACH_COMPILER`, `MACH_CI_*` and `MACH_LIB_*` belong to the toolkit |
 | `test` | `true` | `false` makes the leg build-only |
 | `timeout` | `timeout-minutes` | leg timeout |
 
 Before anything builds, each leg reads the manifest of the project and of every subproject it builds or tests. It fails when one declares no profile the leg uses, or no target named by the leg's `target`. A manifest the leg tests must also declare a target for the leg's host. A build-only project, such as a spirv-only shader, may target another platform. Without that check, mach falls back to a `default = true` target and the tests run a binary the host cannot execute.
 
-The primary leg is the first light leg that runs. `fmt` and `all-targets` run on that leg only.
+The plan refuses a configuration in which no light leg remains after `skip-legs`, because a pull request into `dev` would then build nothing and `gate` would still pass. The primary leg is the first light leg. `fmt` and `all-targets` run on that leg only.
 
 A **subproject** is `{"path"}` plus these optional keys. The path may be a glob such as `examples/*`. Each leg expands it, in sorted order, to every matching directory that holds a `mach.toml`, and the entry's keys apply to every match. A glob that matches no project fails the leg. The plan refuses `**`, because it would reach into `dep/` and `out/`, and it refuses a project listed twice. A new project directory is then covered without an edit to `ci.yml`.
 
@@ -273,3 +281,5 @@ esac
 ### Versions
 
 Callers reference the workflow and the gate and seed actions at `@main`. A toolkit change lands on `dev` first, and this repo's `dev` to `main` pull request, which runs every leg, is its release gate. The workflow checks out its actions and scripts at its own commit, so one caller ref pins all of them together. The mach seed pin is `.github/actions/seed-mach/version`. Bumping it is one pull request here, and it moves every caller that has not set `mach-version`.
+
+Because every caller follows `main`, the toolkit has no version tags. A release is the `dev` to `main` pull request, and the org-wide note in CONTRIBUTING about tagging releases does not apply to this repo. Before that pull request merges, every adopter's `dev` is preflighted against the change.

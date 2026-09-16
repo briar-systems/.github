@@ -77,15 +77,17 @@ jobs:
          {"path": "test/fixture/examples/*", "build": true, "test": false}]
       evidence: test/fixture/out/
 
-  # a caller-owned heavy job seeding directly, through the newest published
-  # release rather than the family pin
+  # a caller-owned heavy job seeding directly, twice: the family pin, then the
+  # newest published release, which must win and stay outside the workspace
   seed-latest:
     if: github.base_ref == 'main' || inputs.heavy == 'all' || inputs.heavy == 'seed-latest'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
-      - name: seed
+      - name: seed pin
+        uses: ./.github/actions/seed-mach
+      - name: seed latest
         id: seed
         uses: ./.github/actions/seed-mach
         with:
@@ -93,9 +95,14 @@ jobs:
       - name: report
         env:
           TAG: ${{ steps.seed.outputs.tag }}
+          COMPILER: ${{ steps.seed.outputs.compiler }}
         run: |
           set -euo pipefail
           mach info
+          [ "$(command -v mach)" = "$COMPILER" ] || { echo "::error::mach on PATH is $(command -v mach), not the latest seed $COMPILER"; exit 1; }
+          [ "v$(mach info --version)" = "$TAG" ] || { echo "::error::mach on PATH is not $TAG"; exit 1; }
+          case "$COMPILER" in "$GITHUB_WORKSPACE"/*) echo "::error::the seed landed in the workspace"; exit 1 ;; esac
+          [ -z "$(git status --porcelain --ignored)" ] || { git status --porcelain --ignored; echo "::error::seeding left files in the workspace"; exit 1; }
           echo "seeded $TAG"
 
   gate:

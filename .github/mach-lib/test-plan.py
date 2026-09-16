@@ -73,13 +73,22 @@ class Tiers(unittest.TestCase):
         self.assertTrue(config['fmt'])
         self.assertEqual([leg['name'] for leg in legs if leg['primary']], ['x86_64-linux'])
 
-    def test_fmt_without_a_light_leg_is_refused(self):
-        with self.assertRaises(plan.PlanError):
-            run('main', **{'skip-legs': '["x86_64-linux"]'})
+    def test_no_light_leg_is_refused_whatever_fmt_says(self):
+        heavy_only = '[{"name": "a", "runs-on": "x", "tier": "heavy"}]'
+        cases = {
+            'skipped': {'skip-legs': '["x86_64-linux"]'},
+            'heavy only': {'legs': heavy_only},
+        }
+        for label, overrides in cases.items():
+            for fmt in (True, False):
+                for base in ('dev', 'main'):
+                    with self.subTest(label, fmt=fmt, base=base), self.assertRaises(plan.PlanError):
+                        run(base, fmt=fmt, **overrides)
 
-    def test_primary_falls_to_first_leg_when_no_light_leg_runs(self):
-        legs, _ = run('main', fmt=False, **{'skip-legs': '["x86_64-linux"]'})
-        self.assertEqual([leg['name'] for leg in legs if leg['primary']], ['aarch64-linux'])
+    def test_a_promoted_leg_satisfies_the_light_tier(self):
+        legs, _ = run('dev', fmt=False, legs='[{"name": "a", "runs-on": "x", "tier": "heavy"}]',
+                      **{'light-legs': '["a"]'})
+        self.assertEqual([(leg['name'], leg['primary']) for leg in legs], [('a', True)])
 
 
 class Legs(unittest.TestCase):
@@ -115,10 +124,6 @@ class Legs(unittest.TestCase):
         legs, _ = run('main', **{'skip-legs': '["x86_64-windows"]'})
         self.assertNotIn('x86_64-windows', [leg['name'] for leg in legs])
 
-    def test_every_leg_skipped_is_an_empty_matrix(self):
-        legs, _ = run('dev', fmt=False, **{'skip-legs': '["x86_64-linux"]'})
-        self.assertEqual(legs, [])
-
     def test_refusals(self):
         cases = {
             'unknown key': {'legs': '[{"name": "a", "runs-on": "x", "arch": "y"}]'},
@@ -138,10 +143,23 @@ class Legs(unittest.TestCase):
             'not array': {'legs': '{}'},
             'string build-args': {'legs': '[{"name": "a", "runs-on": "x", "build-args": "--pie"}]'},
             'non-string env': {'legs': '[{"name": "a", "runs-on": "x", "env": {"K": 1}}]'},
+            'compiler env': {'legs': '[{"name": "a", "runs-on": "x", "env": {"MACH_COMPILER": "/bin/true"}}]'},
+            'ci env': {'legs': '[{"name": "a", "runs-on": "x", "env": {"MACH_CI_TIER": "heavy"}}]'},
+            'lib env': {'legs': '[{"name": "a", "runs-on": "x", "env": {"MACH_LIB_HOOKS_DIR": "x"}}]'},
+            'bad env name': {'legs': '[{"name": "a", "runs-on": "x", "env": {"A=B": "c"}}]'},
+            'empty env name': {'legs': '[{"name": "a", "runs-on": "x", "env": {"": "c"}}]'},
+            'multiline env': {'legs': '[{"name": "a", "runs-on": "x", "env": {"K": "a\\nb"}}]'},
+            'carriage env': {'legs': '[{"name": "a", "runs-on": "x", "env": {"K": "a\\rb"}}]'},
         }
         for label, overrides in cases.items():
             with self.subTest(label), self.assertRaises(plan.PlanError):
                 run('main', **overrides)
+
+
+class LegEnv(unittest.TestCase):
+    def test_other_mach_names_pass(self):
+        legs, _ = run('dev', legs='[{"name": "a", "runs-on": "x", "env": {"MACH_JOBS": "2", "_x1": ""}}]')
+        self.assertEqual(legs[0]['env'], {'MACH_JOBS': '2', '_x1': ''})
 
 
 class Subprojects(unittest.TestCase):
