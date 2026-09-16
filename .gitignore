@@ -6,4 +6,6 @@ test/fixture/out/
 test/fixture/dep/
 test/fixture/consumer/out/
 test/fixture/consumer/dep/
+test/fixture/examples/*/out/
+test/fixture/examples/*/dep/
 __pycache__/
