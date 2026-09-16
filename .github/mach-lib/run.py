@@ -4,6 +4,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tomllib
 
 
 def mach(*args, cwd=None):
@@ -23,6 +24,61 @@ def applies(sub, leg):
     if sub['legs'] and leg['name'] not in sub['legs']:
         return False
     return sub['tier'] == 'light' or leg['run-tier'] == 'heavy'
+
+
+def host():
+    info = subprocess.run([os.environ['MACH_COMPILER'], 'info'], capture_output=True, text=True, check=True).stdout
+    return parse_host(info)
+
+
+def parse_host(info):
+    fields = dict(line.split(': ', 1) for line in info.splitlines() if ': ' in line)
+    return {'name': fields['host'], 'isa': fields['isa'], 'os': fields['os']}
+
+
+def manifest_problems(path, manifest, leg, profiles, host, tested):
+    problems = []
+    targets = manifest.get('target', {})
+    if leg['target']:
+        if leg['target'] not in targets:
+            problems.append(path + ' declares no target ' + leg['target'] + ' for leg ' + leg['name'])
+    # with no host match mach falls back to a default target, and the tests then
+    # run a binary this host cannot execute. a build-only project may target
+    # something else entirely, such as a spirv-only shader project.
+    elif tested and targets and not any(t.get('isa') == host['isa'] and t.get('os') == host['os'] for t in targets.values()):
+        problems.append(path + ' declares no target for the host ' + host['name'] + ' of leg ' + leg['name']
+                        + '; declare one, give the leg a target, or skip the leg')
+    declared = manifest.get('profile', {})
+    for profile in profiles:
+        if profile not in declared:
+            problems.append(path + ' declares no profile ' + profile)
+    return problems
+
+
+def leg_manifests(leg, config):
+    tests = leg['test']
+    manifests = [(config['project'], tests and config['test'])]
+    manifests += [(sub['path'], tests and sub['test']) for sub in config['subprojects']
+                  if applies(sub, leg) and (sub['build'] or sub['test'])]
+    return manifests
+
+
+def check_manifests(leg, config):
+    found = host()
+    problems = []
+    for path, tested in leg_manifests(leg, config):
+        manifest_path = str(Path(path) / 'mach.toml')
+        with open(manifest_path, 'rb') as handle:
+            manifest = tomllib.load(handle)
+        profiles = list(config['profiles'])
+        if path == config['project'] and leg['primary'] and config['all-targets'] and 'release' not in profiles:
+            profiles.append('release')
+        problems += manifest_problems(manifest_path, manifest, leg, profiles, found, tested)
+    for problem in problems:
+        print('::error::' + problem)
+    if problems:
+        sys.exit(1)
+    print('every manifest declares the targets and profiles leg ' + leg['name'] + ' uses')
 
 
 def skip(reason):
@@ -96,7 +152,17 @@ def fmt(leg, config):
         return skip('fmt is off for this repo')
     if not leg['primary']:
         return skip('fmt runs once, on the primary leg')
-    mach('fmt', '--check', config['project'])
+    # formatting is host independent, so every subproject is checked here
+    # whatever legs and tier it builds on
+    failed = []
+    for path in [config['project']] + [sub['path'] for sub in config['subprojects'] if sub['fmt']]:
+        try:
+            mach('fmt', '--check', path)
+        except subprocess.CalledProcessError:
+            failed.append(path)
+    if failed:
+        print('::error::not formatted: ' + ', '.join(failed))
+        sys.exit(1)
 
 
 def all_targets(leg, config):
@@ -109,6 +175,7 @@ def all_targets(leg, config):
 
 PHASES = {
     'env': export_env,
+    'manifests': check_manifests,
     'deps': deps,
     'build': build,
     'test': test,
