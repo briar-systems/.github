@@ -147,8 +147,9 @@ jobs:
         run: |
           set -euo pipefail
           [ "$RUNNER_OS" = Linux ] || { echo "::error::leg ${{ matrix.leg.name }} asks for apt packages on $RUNNER_OS"; exit 1; }
+          read -ra packages <<< "$PACKAGES"
           sudo apt-get update
-          sudo apt-get install -y $PACKAGES
+          sudo apt-get install -y "${packages[@]}"
       - name: seed
         id: seed
         uses: ./.mach-lib/.github/actions/seed-mach
