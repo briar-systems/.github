@@ -146,9 +146,14 @@ def plan(inputs, base_ref, root):
     if duplicates:
         raise PlanError('duplicate leg names ' + ', '.join(duplicates))
     skip = string_list('input', 'skip-legs', parse_list(inputs['skip-legs'], 'skip-legs'))
-    unknown = sorted(set(skip) - set(names))
-    if unknown:
-        raise PlanError('skip-legs names unknown legs ' + ', '.join(unknown))
+    light = string_list('input', 'light-legs', parse_list(inputs['light-legs'], 'light-legs'))
+    for name, selected in (('skip-legs', skip), ('light-legs', light)):
+        unknown = sorted(set(selected) - set(names))
+        if unknown:
+            raise PlanError(name + ' names unknown legs ' + ', '.join(unknown))
+    for leg in legs:
+        if leg['name'] in light:
+            leg['tier'] = 'light'
 
     profiles = string_list('input', 'profiles', parse_list(inputs['profiles'], 'profiles'))
     for profile in profiles:
@@ -203,6 +208,7 @@ def main():
         'legs': env['PLAN_LEGS'] or json.dumps(DEFAULT_LEGS),
         'extra-legs': env['PLAN_EXTRA_LEGS'] or '[]',
         'skip-legs': env['PLAN_SKIP_LEGS'] or '[]',
+        'light-legs': env['PLAN_LIGHT_LEGS'] or '[]',
         'heavy': env['PLAN_HEAVY'],
         'profiles': env['PLAN_PROFILES'],
         'subprojects': env['PLAN_SUBPROJECTS'] or '[]',
