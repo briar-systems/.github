@@ -75,7 +75,7 @@ jobs:
 
   gate:
     if: always()
-    needs: [toolkit, fixture, seed-latest]
+    needs: [toolkit, fixture]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
