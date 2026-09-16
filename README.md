@@ -123,7 +123,7 @@ Before anything builds, each leg reads the manifest of the project and of every 
 
 The primary leg is the first light leg that runs. `fmt` and `all-targets` run on that leg only.
 
-A **subproject** is `{"path"}` plus these optional keys:
+A **subproject** is `{"path"}` plus these optional keys. The path may be a glob such as `examples/*`. Each leg expands it, in sorted order, to every matching directory that holds a `mach.toml`, and the entry's keys apply to every match. A glob that matches no project fails the leg. The plan refuses `**`, because it would reach into `dep/` and `out/`, and it refuses a project listed twice. A new project directory is then covered without an edit to `ci.yml`.
 
 | key | default | meaning |
 | --- | --- | --- |

@@ -120,6 +120,10 @@ def normalize_subproject(entry, legs):
     unknown = sorted(set(sub['legs']) - legs)
     if unknown:
         raise PlanError('subproject ' + sub['path'] + ' names unknown legs ' + ', '.join(unknown))
+    # a recursive glob would descend into dep/ and out/ trees that hold manifests of their own
+    if '**' in sub['path']:
+        raise PlanError('subproject ' + sub['path'] + ' uses **; name each level with *')
+    sub['path'] = os.path.normpath(sub['path'])
     return sub
 
 
@@ -164,6 +168,10 @@ def plan(inputs, base_ref, root):
             raise PlanError('profile name ' + json.dumps(profile) + ' must be lowercase letters, digits, underscores and dashes')
     subprojects = [normalize_subproject(entry, set(names))
                    for entry in parse_list(inputs['subprojects'], 'subprojects')]
+    paths = [sub['path'] for sub in subprojects]
+    duplicates = sorted({path for path in paths if paths.count(path) > 1})
+    if duplicates:
+        raise PlanError('duplicate subproject paths ' + ', '.join(duplicates))
 
     # a dispatch names heavy work by leg name, or by a name the caller's own
     # jobs and hooks understand; `all` and a pull request into main mean all of it

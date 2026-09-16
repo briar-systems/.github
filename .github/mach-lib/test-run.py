@@ -1,5 +1,6 @@
 import importlib.util
 from pathlib import Path
+import tempfile
 import unittest
 
 spec = importlib.util.spec_from_file_location('run', Path(__file__).with_name('run.py'))
@@ -81,6 +82,51 @@ class LegManifests(unittest.TestCase):
     def test_a_repo_without_project_tests(self):
         config = dict(self.config, test=False)
         self.assertEqual(run.leg_manifests(dict(leg(), **{'run-tier': 'light'}), config)[0], ('.', False))
+
+
+def sub(path, **keys):
+    return dict({'path': path, 'build': True, 'test': False}, **keys)
+
+
+class Expand(unittest.TestCase):
+    def setUp(self):
+        self.root = tempfile.TemporaryDirectory()
+        base = Path(self.root.name)
+        for name in ('zeta', 'alpha', 'mid'):
+            (base / 'examples' / name).mkdir(parents=True)
+            (base / 'examples' / name / 'mach.toml').write_text('')
+        (base / 'examples' / 'notes').mkdir()
+        (base / 'examples' / 'README.md').write_text('')
+
+    def tearDown(self):
+        self.root.cleanup()
+
+    def expand(self, *subs):
+        return run.expand_subprojects(list(subs), self.root.name)
+
+    def test_a_glob_expands_to_sorted_projects_with_the_entry_keys(self):
+        expanded = self.expand(sub('examples/*', jobs=2))
+        self.assertEqual([x['path'] for x in expanded], ['examples/alpha', 'examples/mid', 'examples/zeta'])
+        self.assertTrue(all(x['jobs'] == 2 and x['build'] and not x['test'] for x in expanded))
+
+    def test_matches_use_posix_separators(self):
+        # a windows path would reach mach and the duplicate check with backslashes
+        expanded = self.expand(sub('examples/*'))
+        self.assertTrue(all('\\' not in x['path'] and x['path'].count('/') == 1 for x in expanded))
+
+    def test_literal_paths_pass_through_in_order(self):
+        expanded = self.expand(sub('tools'), sub('examples/m*'))
+        self.assertEqual([x['path'] for x in expanded], ['tools', 'examples/mid'])
+
+    def test_a_glob_without_a_project_is_refused(self):
+        with self.assertRaises(run.ExpandError):
+            self.expand(sub('examples/nothing*'))
+        with self.assertRaises(run.ExpandError):
+            self.expand(sub('examples/note?'))
+
+    def test_a_project_matched_twice_is_refused(self):
+        with self.assertRaises(run.ExpandError):
+            self.expand(sub('examples/alpha'), sub('examples/*'))
 
 
 if __name__ == '__main__':
