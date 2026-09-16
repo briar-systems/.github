@@ -32,6 +32,7 @@ jobs:
           python3 .github/actions/gate/test-gate.py
           python3 .github/mach-lib/test-plan.py
           python3 .github/mach-lib/test-run.py
+          python3 tools/preflight/test-preflight.py
       - uses: actions/setup-go@v5
         with:
           go-version: stable
