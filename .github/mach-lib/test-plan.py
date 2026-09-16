@@ -162,11 +162,17 @@ class Subprojects(unittest.TestCase):
             'test without pull': '[{"path": "a", "pull": false}]',
             'bad tier': '[{"path": "a", "tier": "medium"}]',
             'string fmt': '[{"path": "a", "fmt": "no"}]',
+            'recursive glob': '[{"path": "examples/**"}]',
+            'duplicate path': '[{"path": "a"}, {"path": "./a/"}]',
             'missing path': '[{"test": true}]',
         }
         for label, subprojects in cases.items():
             with self.subTest(label), self.assertRaises(plan.PlanError):
                 run('dev', subprojects=subprojects)
+
+    def test_glob_paths_pass_the_plan(self):
+        _, config = run('dev', subprojects='[{"path": "examples/*/", "build": true, "test": false}]')
+        self.assertEqual(config['subprojects'][0]['path'], 'examples/*')
 
     def test_pull_only(self):
         _, config = run('dev', subprojects='[{"path": "a", "test": false}]')

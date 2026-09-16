@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -78,7 +79,34 @@ def check_manifests(leg, config):
         print('::error::' + problem)
     if problems:
         sys.exit(1)
+    print('subprojects: ' + (', '.join(sub['path'] for sub in config['subprojects']) or 'none'))
     print('every manifest declares the targets and profiles leg ' + leg['name'] + ' uses')
+
+
+GLOB = re.compile(r'[*?[]')
+
+
+class ExpandError(ValueError):
+    pass
+
+
+def expand_subprojects(subprojects, root='.'):
+    expanded = []
+    for sub in subprojects:
+        if not GLOB.search(sub['path']):
+            expanded.append(sub)
+            continue
+        # a directory without a manifest is not a project, whatever the glob says
+        matches = sorted(os.path.relpath(match, root) for match in Path(root).glob(sub['path'])
+                         if (match / 'mach.toml').is_file())
+        if not matches:
+            raise ExpandError('subproject glob ' + sub['path'] + ' matches no directory holding a mach.toml')
+        expanded += [dict(sub, path=path) for path in matches]
+    paths = [sub['path'] for sub in expanded]
+    duplicates = sorted({path for path in paths if paths.count(path) > 1})
+    if duplicates:
+        raise ExpandError('subprojects matched more than once: ' + ', '.join(duplicates))
+    return expanded
 
 
 def skip(reason):
@@ -189,7 +217,11 @@ def main():
     leg = json.loads(os.environ['MACH_LIB_LEG'])
     config = json.loads(os.environ['MACH_LIB_CONFIG'])
     try:
+        config['subprojects'] = expand_subprojects(config['subprojects'])
         PHASES[sys.argv[1]](leg, config)
+    except ExpandError as error:
+        print('::error::' + str(error))
+        sys.exit(1)
     except subprocess.CalledProcessError as error:
         print('::error::' + ' '.join(error.cmd[1:]) + ' exited ' + str(error.returncode))
         sys.exit(1)
