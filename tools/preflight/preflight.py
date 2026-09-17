@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import platform
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
@@ -20,6 +21,19 @@ import yaml
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 LIB_JOB = 'mach-lib.yml@'
+
+
+def remove_tree(path):
+    """remove a scratch tree even where tools left it read-only, such as a go module cache"""
+    def force(function, target, _):
+        for entry in (Path(target).parent, Path(target)):
+            if entry.exists() and not entry.is_symlink():
+                entry.chmod(entry.stat().st_mode | stat.S_IWUSR | stat.S_IXUSR)
+        function(target)
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=force)
+    else:
+        shutil.rmtree(path, onerror=force)
 
 
 def load_module(name, path):
@@ -94,7 +108,7 @@ class Toolkit:
     def __init__(self, ref, work):
         self.dir = work / 'toolkit'
         if self.dir.exists():
-            shutil.rmtree(self.dir)
+            remove_tree(self.dir)
         self.dir.mkdir(parents=True)
         archive = subprocess.run(['git', 'archive', ref, '.github'], cwd=REPO, capture_output=True, check=True).stdout
         subprocess.run(['tar', '-x', '-C', str(self.dir)], input=archive, check=True)
@@ -118,7 +132,7 @@ def seed(toolkit, tag, work, org):
     host, ext = local_host()
     directory = work / 'seed'
     if directory.exists():
-        shutil.rmtree(directory)
+        remove_tree(directory)
     directory.mkdir(parents=True)
     metadata = json.loads(sh('gh', 'api', 'repos/' + org + '/mach/releases/tags/' + tag))
     tag, asset = toolkit.verify.select_release(metadata, tag, host, ext)
@@ -158,7 +172,7 @@ def adopters(config):
 
 def clone(org, name, branch, submodules, destination):
     if destination.exists():
-        shutil.rmtree(destination)
+        remove_tree(destination)
     sh('git', 'clone', '-q', '--depth', '1', '-b', branch, 'https://github.com/' + org + '/' + name, str(destination))
     # match actions/checkout: no submodules unless the caller asks, and recursion only when it says so
     if submodules in ('true', 'recursive'):
@@ -209,7 +223,7 @@ def sample(toolkit, compiler, root, inputs, work, env_path):
     leg = next(e['leg'] for e in matrix['include'] if e['leg']['primary'])
     temp = work / 'runner' / root.name
     if temp.exists():
-        shutil.rmtree(temp)
+        remove_tree(temp)
     temp.mkdir(parents=True)
     (temp / 'env').write_text('')
     env = dict(os.environ, MACH_COMPILER=str(compiler), MACH_LIB_LEG=json.dumps(leg),
