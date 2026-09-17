@@ -376,4 +376,6 @@ esac
 
 Callers reference the workflow and the gate and seed actions at `@main`. A toolkit change lands on `dev` first, and this repo's `dev` to `main` pull request, which runs every leg, is its release gate. The workflow checks out its actions and scripts at its own commit, so one caller ref pins all of them together. The mach seed pin is `.github/actions/seed-mach/version`. Bumping it is one pull request here, and it moves every caller that has not set `mach-version`.
 
+Every family manifest declares the compiler it needs as `mach = "^5.3"` under `[project]`. The key only exists from mach 5.3 on, and older compilers refuse it (`unknown key 'mach' in [project]`), so having the key already sets a 5.3 floor. Once any adopter declares it, the pin cannot go below v5.3.0, and a caller that sets `mach-version` must name v5.3.0 or later.
+
 Because every caller follows `main`, the toolkit has no version tags. A release is the `dev` to `main` pull request, and the org-wide note in CONTRIBUTING about tagging releases does not apply to this repo. Before that pull request merges, every adopter's `dev` is preflighted against the change with [`tools/preflight`](tools/preflight/README.md). A change to `mach-release.yml` or its script is also rehearsed by dispatching `release-rehearsal.yml` on the branch.
