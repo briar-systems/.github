@@ -8,7 +8,7 @@ The family CI contract:
 
 - each repo has one `.github/workflows/ci.yml`, and a release workflow where one exists
 - a pull request into `dev` runs the light tier, a pull request into `main` runs every tier, and `workflow_dispatch` pulls named heavy work onto any ref
-- nothing runs on push, and nothing runs on a schedule. Deploy-only workflows are the exception
+- nothing runs on push, and nothing runs on a schedule. Deploy-only workflows are the exception, and so is `release.yml` on a `v*` tag push (see [Releases](#releases))
 - a `ci.yml` that a release or cd workflow calls also declares a `workflow_call` input `heavy`, and the caller passes `all`. A tag push has no base branch, so without it the release would run only the light tier
 - tiering is strict: only `x86_64-linux` is light unless a ruling below says otherwise
 - every adoption pull request includes a `mach fmt .` pass, since the light tier checks formatting
@@ -30,10 +30,13 @@ The toolkit:
 | path | what it is |
 | --- | --- |
 | `.github/workflows/mach-lib.yml` | the reusable library pipeline (`on: workflow_call`) |
+| `.github/workflows/mach-release.yml` | the reusable release pipeline a `v*` tag runs |
+| `.github/mach-release` | the release script, with its tests |
 | `.github/actions/seed-mach` | installs a published mach release after checking its archive against `SHA256SUMS`. The family pin is in `version`. Each use seeds its own directory under `$RUNNER_TEMP` and puts it first on `PATH`, so a job may seed more than once and the last seed wins |
 | `.github/actions/gate` | the gate logic |
 | `.github/mach-lib` | the plan and leg scripts the workflow runs, with their tests |
-| `test/fixture` | the library this repo's own `ci.yml` runs the workflow against |
+| `test/fixture` | the library this repo's own `ci.yml` runs the workflow against, and `release-rehearsal.yml` rehearses a release of |
+| `tools/preflight` | the adopter preflight run before every release. It is not part of the caller contract |
 
 ### Why the caller owns `gate`
 
@@ -169,9 +172,43 @@ A hook switches on `MACH_CI_LEG` for per-host work. It reads `MACH_CI_TIER` or `
 
 **Extra jobs** are ordinary jobs in the caller. A heavy-only job uses `if: github.base_ref == 'main' || inputs.heavy == 'all' || inputs.heavy == '<name>'`, and `<name>` goes in the dispatch options. It can seed through `briar-systems/.github/.github/actions/seed-mach@main`. Every extra job goes in `gate`'s `needs:`.
 
-### Called from a release workflow
+### Releases
 
-`inputs.heavy` resolves from whichever trigger started the run, so one `lib` job serves a dispatch and a call alike:
+A release is a pushed `v*` tag, and `mach-release.yml` publishes it. A called workflow cannot call its caller's `ci.yml`, so the caller's `release.yml` runs the shared workflow twice, around its own full CI:
+
+```yaml
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    uses: briar-systems/.github/.github/workflows/mach-release.yml@main
+    with:
+      stage: verify
+
+  ci:
+    needs: verify
+    uses: ./.github/workflows/ci.yml
+    with:
+      heavy: all
+
+  publish:
+    needs: [verify, ci]
+    uses: briar-systems/.github/.github/workflows/mach-release.yml@main
+    permissions:
+      contents: write
+    with:
+      stage: publish
+```
+
+A tag push is the one push trigger the contract allows outside deploy-only workflows. A tag has no base branch, so `ci.yml` declares a `workflow_call` input `heavy`, and `inputs.heavy` resolves from whichever trigger started the run:
 
 ```yaml
 on:
@@ -189,15 +226,67 @@ on:
         options: [none, all, aarch64-linux, x86_64-windows, aarch64-darwin, x86_64-darwin]
 ```
 
-The release workflow calls it with the full tier:
+`stage: verify` runs first and fails when:
+
+- the tag is not `v` plus `[project].version` from the manifest
+- the version is not semver
+- the changelog has no single, non-empty `## [X.Y.Z]` section. A date after the heading is fine
+
+It outputs `version`, `tag` and `rehearsal` for the caller's own jobs.
+
+`stage: publish` runs last. It rechecks everything from the same commit rather than trusting passed values. It then:
+
+1. reads the caller's workflow file and fails unless the publish job needs every other job, one job calls `./.github/workflows/ci.yml` with `heavy: all`, and every job other than verify needs verify
+2. collects the assets and fails unless they are exactly the declared set. It adds `SHA256SUMS` over them
+3. fails when a release or draft for the tag already exists
+4. drafts the release, titled with the tag, with the changelog section as its notes and every asset attached
+5. checks that the draft holds exactly those assets and notes, then publishes it
+
+A version with a prerelease part is published as a prerelease. A stable release is marked latest only if it is at least every published stable release, so a backport to an older line never takes latest.
+
+A `workflow_dispatch` rehearses the same path. The tag is `v<version>-rehearsal.<run id>`, which is never pushed, and the draft is a prerelease that is deleted once it is checked. The rehearsal needs no tag, and it proves the gates, the build and the upload before a real tag is pushed.
+
+| input | default | use |
+| --- | --- | --- |
+| `stage` | required | `verify` or `publish` |
+| `project` | `.` | the directory whose `mach.toml` holds the version |
+| `changelog` | `CHANGELOG.md` | the changelog the notes come from |
+| `assets` | none | JSON array of the file names to attach. `{version}` is replaced with the version. Give the same value to both stages |
+| `asset-artifacts` | `release-*` | the artifact name pattern the caller's build jobs upload the assets under |
+| `checksums` | `true` | attach `SHA256SUMS` when there are assets |
+| `keep-rehearsal` | `false` | keep a rehearsal's draft for inspection. Delete it afterwards |
+
+A caller that ships binaries adds its own build jobs. Each job needs `verify`, names its files with `needs.verify.outputs.version`, and uploads them as an artifact matching `asset-artifacts`. The publish job then needs those jobs too:
 
 ```yaml
-jobs:
-  ci:
-    uses: ./.github/workflows/ci.yml
+  build:
+    needs: verify
+    strategy:
+      matrix:
+        include:
+          - { asset: x86_64-linux, runs-on: ubuntu-latest }
+          - { asset: x86_64-windows, runs-on: windows-latest }
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: briar-systems/.github/.github/actions/seed-mach@main
+      - run: ./tools/package.sh "${{ needs.verify.outputs.version }}" "${{ matrix.asset }}" dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.asset }}
+          path: dist/*
+
+  publish:
+    needs: [verify, ci, build]
+    uses: briar-systems/.github/.github/workflows/mach-release.yml@main
+    permissions:
+      contents: write
     with:
-      heavy: all
+      stage: publish
+      assets: '["mls-{version}-x86_64-linux.tar.gz", "mls-{version}-x86_64-windows.zip"]'
 ```
+
+This repo's `release-rehearsal.yml` is that shape, run against `test/fixture`.
 
 ### Override example
 
@@ -282,4 +371,4 @@ esac
 
 Callers reference the workflow and the gate and seed actions at `@main`. A toolkit change lands on `dev` first, and this repo's `dev` to `main` pull request, which runs every leg, is its release gate. The workflow checks out its actions and scripts at its own commit, so one caller ref pins all of them together. The mach seed pin is `.github/actions/seed-mach/version`. Bumping it is one pull request here, and it moves every caller that has not set `mach-version`.
 
-Because every caller follows `main`, the toolkit has no version tags. A release is the `dev` to `main` pull request, and the org-wide note in CONTRIBUTING about tagging releases does not apply to this repo. Before that pull request merges, every adopter's `dev` is preflighted against the change.
+Because every caller follows `main`, the toolkit has no version tags. A release is the `dev` to `main` pull request, and the org-wide note in CONTRIBUTING about tagging releases does not apply to this repo. Before that pull request merges, every adopter's `dev` is preflighted against the change with [`tools/preflight`](tools/preflight/README.md). A change to `mach-release.yml` or its script is also rehearsed by dispatching `release-rehearsal.yml` on the branch.
