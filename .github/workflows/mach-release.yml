@@ -1,0 +1,192 @@
+name: mach release
+
+# the release pipeline every mach library calls from a `v*` tag push. the caller
+# runs it twice around its own full CI: `stage: verify` checks the tag against
+# mach.toml and the changelog before anything builds, and `stage: publish`
+# drafts the release with the changelog notes and every declared asset, then
+# publishes it. a called workflow cannot call the caller's ci.yml, so the caller
+# owns that job, and publish refuses a caller whose publish job does not need
+# it. a dispatch rehearses the same path under a throwaway tag and deletes the
+# draft. see README.md for the contract.
+
+on:
+  workflow_call:
+    inputs:
+      stage:
+        description: verify, run first, or publish, run last and needing every other job
+        type: string
+        required: true
+      project:
+        description: directory holding the mach.toml whose [project] version the tag must match
+        type: string
+        default: .
+      changelog:
+        description: changelog holding a "## [X.Y.Z]" section for the version
+        type: string
+        default: CHANGELOG.md
+      assets:
+        description: JSON array of asset file names to attach, with {version} for the version; the build must produce exactly these
+        type: string
+        default: ""
+      asset-artifacts:
+        description: pattern naming the caller's uploaded artifacts that hold the assets
+        type: string
+        default: release-*
+      checksums:
+        description: attach SHA256SUMS over the assets
+        type: boolean
+        default: true
+      keep-rehearsal:
+        description: leave a rehearsal's draft in place for inspection instead of deleting it
+        type: boolean
+        default: false
+    outputs:
+      version:
+        description: the version being released
+        value: ${{ jobs.verify.outputs.version }}
+      tag:
+        description: the tag being released, or the rehearsal tag
+        value: ${{ jobs.verify.outputs.tag }}
+      rehearsal:
+        description: true when this run only rehearses
+        value: ${{ jobs.verify.outputs.rehearsal }}
+
+jobs:
+  verify:
+    if: inputs.stage == 'verify'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.verify.outputs.version }}
+      tag: ${{ steps.verify.outputs.tag }}
+      rehearsal: ${{ steps.verify.outputs.rehearsal }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: repo
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: toolkit
+          sparse-checkout: .github/mach-release
+      - name: tag, version and changelog agree
+        id: verify
+        working-directory: repo
+        env:
+          RELEASE_ASSETS: ${{ inputs.assets }}
+          PROJECT: ${{ inputs.project }}
+          CHANGELOG: ${{ inputs.changelog }}
+        run: python3 ../toolkit/.github/mach-release/release.py verify "$PROJECT" "$CHANGELOG" "$RUNNER_TEMP/notes.md"
+
+  publish:
+    if: inputs.stage == 'publish'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      RELEASE_ASSETS: ${{ inputs.assets }}
+      RELEASE_CHECKSUMS: ${{ inputs.checksums }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: repo
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: toolkit
+          sparse-checkout: .github/mach-release
+      # the notes and tag are recomputed from the same commit, so publish never
+      # trusts values a caller could pass in
+      - name: tag, version and changelog agree
+        id: verify
+        working-directory: repo
+        env:
+          PROJECT: ${{ inputs.project }}
+          CHANGELOG: ${{ inputs.changelog }}
+        run: python3 ../toolkit/.github/mach-release/release.py verify "$PROJECT" "$CHANGELOG" "$RUNNER_TEMP/notes.md"
+      - name: the caller gates publish on everything
+        env:
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+        run: |
+          set -euo pipefail
+          path=${WORKFLOW_REF#"$REPO"/}
+          path=${path%@*}
+          gh api -H 'Accept: application/vnd.github.raw' "repos/$REPO/contents/$path?ref=$GITHUB_SHA" > "$RUNNER_TEMP/caller.yml"
+          python3 toolkit/.github/mach-release/release.py caller "$RUNNER_TEMP/caller.yml"
+      - name: download assets
+        if: inputs.assets != ''
+        uses: actions/download-artifact@v8
+        with:
+          pattern: ${{ inputs.asset-artifacts }}
+          path: ${{ runner.temp }}/assets
+          merge-multiple: true
+      - name: assets match the declared set
+        env:
+          VERSION: ${{ steps.verify.outputs.version }}
+        run: python3 toolkit/.github/mach-release/release.py assets "$RUNNER_TEMP/assets" "$VERSION" "$RUNNER_TEMP/assets.txt"
+      - name: no release exists for the tag
+        env:
+          TAG: ${{ steps.verify.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/$REPO/releases" --jq '.[] | {tag_name, draft, prerelease}' | jq -s . > "$RUNNER_TEMP/releases.json"
+          if jq -e --arg tag "$TAG" 'any(.[]; .tag_name == $tag)' "$RUNNER_TEMP/releases.json" > /dev/null; then
+            echo "::error::a release or draft for $TAG already exists; delete it or release a new version"
+            exit 1
+          fi
+      - name: latest or not
+        id: latest
+        env:
+          VERSION: ${{ steps.verify.outputs.version }}
+          TAG: ${{ steps.verify.outputs.tag }}
+        run: python3 toolkit/.github/mach-release/release.py latest "$VERSION" "$TAG" "$RUNNER_TEMP/releases.json"
+      - name: draft the release with every asset
+        id: draft
+        env:
+          TAG: ${{ steps.verify.outputs.tag }}
+          REHEARSAL: ${{ steps.verify.outputs.rehearsal }}
+          PRERELEASE: ${{ steps.verify.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          # a real tag must already exist; a rehearsal tag never does
+          jq -n --arg tag "$TAG" --arg sha "$GITHUB_SHA" --rawfile body "$RUNNER_TEMP/notes.md" \
+            --argjson prerelease "$([ "$REHEARSAL" = true ] || [ "$PRERELEASE" = true ] && echo true || echo false)" \
+            '{tag_name: $tag, target_commitish: $sha, name: $tag, body: $body, draft: true, prerelease: $prerelease}' > "$RUNNER_TEMP/release.json"
+          if [ "$REHEARSAL" != true ]; then
+            gh api "repos/$REPO/git/ref/tags/$TAG" > /dev/null || { echo "::error::tag $TAG does not exist"; exit 1; }
+          fi
+          id=$(gh api -X POST "repos/$REPO/releases" --input "$RUNNER_TEMP/release.json" --jq .id) || {
+            echo "::error::could not create the release; the caller's publish job needs permissions: contents: write"
+            exit 1
+          }
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          echo "drafted release $id for $TAG"
+          while IFS= read -r name; do
+            [ -n "$name" ] || continue
+            gh api -X POST -H 'Content-Type: application/octet-stream' \
+              "https://uploads.github.com/repos/$REPO/releases/$id/assets?name=$name" --input "$RUNNER_TEMP/assets/$name" --jq .name
+          done < "$RUNNER_TEMP/assets.txt"
+      - name: the draft holds exactly the assets
+        env:
+          ID: ${{ steps.draft.outputs.id }}
+        run: |
+          set -euo pipefail
+          got=$(gh api "repos/$REPO/releases/$ID" --jq '.assets[].name' | sort)
+          want=$(sort "$RUNNER_TEMP/assets.txt")
+          [ "$got" = "$want" ] || { echo "::error::the draft holds [$got], expected [$want]"; exit 1; }
+          body=$(gh api "repos/$REPO/releases/$ID" --jq .body)
+          [ "$body" = "$(cat "$RUNNER_TEMP/notes.md")" ] || { echo "::error::the draft's notes differ from the changelog section"; exit 1; }
+      - name: publish
+        if: steps.verify.outputs.rehearsal != 'true'
+        env:
+          ID: ${{ steps.draft.outputs.id }}
+          LATEST: ${{ steps.latest.outputs.latest }}
+        run: gh api -X PATCH "repos/$REPO/releases/$ID" -F draft=false -f make_latest="$LATEST" --jq '.html_url'
+      - name: rehearsal cleanup
+        if: always() && steps.verify.outputs.rehearsal == 'true' && steps.draft.outputs.id != '' && !inputs.keep-rehearsal
+        env:
+          ID: ${{ steps.draft.outputs.id }}
+        run: gh api -X DELETE "repos/$REPO/releases/$ID" && echo "deleted rehearsal draft $ID"

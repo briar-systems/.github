@@ -8,6 +8,12 @@ name: CI
 
 on:
   pull_request:
+  # release-rehearsal.yml runs every tier through this input
+  workflow_call:
+    inputs:
+      heavy:
+        type: string
+        default: none
   workflow_dispatch:
     inputs:
       heavy:
@@ -33,6 +39,7 @@ jobs:
           python3 .github/mach-lib/test-plan.py
           python3 .github/mach-lib/test-run.py
           python3 tools/preflight/test-preflight.py
+          python3 .github/mach-release/test-release.py
       - uses: actions/setup-go@v5
         with:
           go-version: stable

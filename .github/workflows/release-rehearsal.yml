@@ -1,0 +1,83 @@
+name: Release rehearsal
+
+# rehearses mach-release.yml end to end against test/fixture, in the shape of a
+# caller that ships binary assets: verify, full CI, native asset builds, then a
+# publish that drafts, checks and deletes the release. dispatch only, since a
+# rehearsal writes a draft release to this repo.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    uses: ./.github/workflows/mach-release.yml
+    with:
+      stage: verify
+      project: test/fixture
+      changelog: test/fixture/CHANGELOG.md
+      assets: '["fixture-{version}-x86_64-linux.tar.gz", "fixture-{version}-x86_64-windows.zip"]'
+
+  ci:
+    needs: verify
+    uses: ./.github/workflows/ci.yml
+    with:
+      heavy: all
+
+  build:
+    name: build ${{ matrix.asset }}
+    needs: verify
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { asset: x86_64-linux, target: linux-x86_64, runs-on: ubuntu-latest, ext: tar.gz }
+          - { asset: x86_64-windows, target: windows-x86_64, runs-on: windows-latest, ext: zip }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/seed-mach
+      - name: release build
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          mach dep pull test/fixture
+          mach build test/fixture --target "$TARGET" --profile release
+      - name: package
+        env:
+          TARGET: ${{ matrix.target }}
+          NAME: fixture-${{ needs.verify.outputs.version }}-${{ matrix.asset }}.${{ matrix.ext }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          src="test/fixture/out/$TARGET/release"
+          if [ "$RUNNER_OS" = Windows ]; then
+            (cd "$src" && 7z a -tzip "$GITHUB_WORKSPACE/dist/$NAME" . > /dev/null)
+          else
+            tar -C "$src" -czf "dist/$NAME" .
+          fi
+          ls -l dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.asset }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: [verify, ci, build]
+    uses: ./.github/workflows/mach-release.yml
+    permissions:
+      contents: write
+    with:
+      stage: publish
+      project: test/fixture
+      changelog: test/fixture/CHANGELOG.md
+      assets: '["fixture-{version}-x86_64-linux.tar.gz", "fixture-{version}-x86_64-windows.zip"]'
