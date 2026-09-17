@@ -9,10 +9,11 @@ The family CI contract:
 - each repo has one `.github/workflows/ci.yml`, and a release workflow where one exists
 - a pull request into `dev` runs the light tier, a pull request into `main` runs every tier, and `workflow_dispatch` pulls named heavy work onto any ref
 - nothing runs on push, and nothing runs on a schedule. Deploy-only workflows are the exception, and so is `release.yml` on a `v*` tag push (see [Releases](#releases))
-  - a `pull_request` build tests the merge result, not the branch tip, so merging a green pull request verifies the merged state as it was at that moment. That is why `dev` needs no push trigger
-  - if the base moved after the last run, the merged state was never built. `dev` accepts that: the next pull request's merge-result build includes it, so a bad merge shows up at once and costs one fix
-  - `main` does not accept it, because release tags are cut from `main`. The org ruleset therefore requires a branch to be up to date before it merges into `main`, and does not require it for `dev`. The asymmetry is deliberate
-  - before an integration merge into `main`, dispatch the light tier on `dev`'s tip (`gh workflow run CI --ref dev`). It is the cheap way to confirm the branch being promoted is green
+  - a `pull_request` build tests the merge result, not the branch tip, so merging a green pull request verifies the merged state as it was at that moment. That is why no push trigger is needed
+  - if the base moved after the last run, that merged state was never built. `dev` accepts this: the next pull request's merge-result build includes it, so a bad merge shows up at once and costs one fix
+  - `main` is deliberately not held to a stricter rule. `main` is ahead of `dev` by every past release merge, so requiring up-to-date branches would leave every release pull request permanently behind and force a back-merge step. The admin merges that cut releases bypass such a check anyway
+  - what protects `main` instead: it moves only through release pull requests and hotfixes, and a release pull request runs every tier on its merge result. Before opening one, dispatch the light tier on `dev`'s tip (`gh workflow run CI --ref dev`)
+  - the one residual case: a hotfix that lands on `main` while a release pull request is open leaves that pull request's checks built against the old `main`. Close and reopen the pull request before merging. A re-run is not enough, because it reuses the original merge commit
 - a `ci.yml` that a release or cd workflow calls also declares a `workflow_call` input `heavy`, and the caller passes `all`. A tag push has no base branch, so without it the release would run only the light tier
 - tiering is strict: only `x86_64-linux` is light unless a ruling below says otherwise
 - every adoption pull request includes a `mach fmt .` pass, since the light tier checks formatting
