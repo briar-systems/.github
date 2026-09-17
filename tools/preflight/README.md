@@ -31,5 +31,6 @@ Sample hooks can depend on things that exist only on a hosted runner. When a ste
 - `mach-tls` `setup.sh` runs `sudo apt-get install gnutls-bin`. If the package is already installed, pass `--path <dir>` with a `sudo` stub in that directory
 - `boom` and `mach-glfw` `verify.sh` need `xvfb-run`
 - `hedge` `verify.sh` binds `127.0.0.1:19100` through `19105`, which fails while anything else holds those ports
+- `mach-tls` `verify.sh` runs its interop server on `127.0.0.1:9443`, the same port `hedge`'s interop stack uses. While anything else holds it, every server cell reports `FAILED`
 
 Run the preflight in the foreground. On a loaded machine, background tasks can be killed partway through.
