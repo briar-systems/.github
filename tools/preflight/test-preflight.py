@@ -82,6 +82,32 @@ class DepSymlinks(unittest.TestCase):
             self.assertEqual(preflight.dep_symlinks(base), [str(Path('b/dep'))])
 
 
+class RemoveTree(unittest.TestCase):
+    def test_removes_read_only_trees(self):
+        with tempfile.TemporaryDirectory() as root:
+            tree = Path(root) / 'clone'
+            locked = tree / 'gopath' / 'pkg' / 'mod' / 'x@v1'
+            locked.mkdir(parents=True)
+            (locked / 'go.mod').write_text('module x\n')
+            (locked / 'go.mod').chmod(0o444)
+            locked.chmod(0o555)
+            (tree / 'gopath' / 'pkg' / 'mod').chmod(0o555)
+            preflight.remove_tree(tree)
+            self.assertFalse(tree.exists())
+
+    def test_does_not_follow_symlinks_out(self):
+        with tempfile.TemporaryDirectory() as root:
+            outside = Path(root) / 'outside'
+            outside.mkdir()
+            (outside / 'keep').write_text('x')
+            tree = Path(root) / 'clone'
+            tree.mkdir()
+            os.symlink(outside, tree / 'dep')
+            preflight.remove_tree(tree)
+            self.assertFalse(tree.exists())
+            self.assertTrue((outside / 'keep').exists())
+
+
 class Config(unittest.TestCase):
     def test_every_default_leg_runner_has_a_host(self):
         config = tomllib.loads((HERE / 'preflight.toml').read_text())
