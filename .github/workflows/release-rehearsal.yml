@@ -6,6 +6,7 @@ name: Release rehearsal
 # rehearsal writes a draft release to this repo.
 
 on:
+  pull_request:
   workflow_dispatch:
 
 permissions:
