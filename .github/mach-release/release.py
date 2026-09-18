@@ -112,9 +112,26 @@ def make_latest(version, tag, releases):
     return all(version_key(version) >= other for other in stable)
 
 
+def existing_release(tag, sha, releases):
+    """what publish does about releases already carrying the tag: create, or done when one is published at this commit"""
+    matching = [r for r in releases if r['tag_name'] == tag]
+    if not matching:
+        return 'create'
+    published = [r for r in matching if not r['draft']]
+    if len(matching) > 1 or not published:
+        raise ReleaseError('a draft for ' + tag + ' already exists; a parallel run may still be publishing, '
+                           'else delete the draft and re-run')
+    release = published[0]
+    if release.get('target_commitish') != sha:
+        raise ReleaseError(tag + ' is already published from ' + str(release.get('target_commitish'))
+                           + ', not ' + sha + '; release a new version instead')
+    return 'done'
+
+
 def caller_problems(workflow_text):
     """the caller's release workflow must gate publish on its full CI and on every other job"""
-    jobs = yaml.safe_load(workflow_text).get('jobs') or {}
+    workflow = yaml.safe_load(workflow_text) or {}
+    jobs = workflow.get('jobs') or {}
 
     def stage(job):
         uses = str(job.get('uses', ''))
@@ -125,6 +142,12 @@ def caller_problems(workflow_text):
         return {value} if isinstance(value, str) else set(value)
 
     problems = []
+    concurrency = workflow.get('concurrency')
+    group = concurrency.get('group', '') if isinstance(concurrency, dict) else ''
+    cancel = concurrency.get('cancel-in-progress', False) if isinstance(concurrency, dict) else False
+    # one tag push can be delivered twice; a group on the ref makes the second run wait for the first
+    if 'github.ref' not in str(group) or cancel is not False:
+        problems.append('the workflow must set concurrency to a group on github.ref with cancel-in-progress: false')
     publishers = [name for name, job in jobs.items() if stage(job) == 'publish']
     if len(publishers) != 1:
         return ['the workflow must have exactly one mach-release publish job, found ' + str(len(publishers))]
@@ -178,6 +201,12 @@ def main():
         files = collect_assets(directory, names, env['RELEASE_CHECKSUMS'] == 'true')
         Path(list_path).write_text(''.join(f + '\n' for f in files))
         print('assets: ' + (', '.join(files) or 'none'))
+    elif mode == 'existing':
+        tag, sha, releases_path = sys.argv[2:]
+        action = existing_release(tag, sha, json.loads(Path(releases_path).read_text()))
+        output(action=action)
+        if action == 'done':
+            print(tag + ' is already published at ' + sha + '; nothing to do')
     elif mode == 'latest':
         version, tag, releases_path = sys.argv[2:]
         latest = make_latest(version, tag, json.loads(Path(releases_path).read_text()))

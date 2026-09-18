@@ -32,6 +32,9 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   verify:
     uses: briar-systems/.github/.github/workflows/mach-release.yml@main
@@ -173,6 +176,30 @@ class Latest(unittest.TestCase):
         self.assertTrue(release.make_latest('0.1.0', 'v0.1.0', []))
 
 
+def published(tag, sha, draft=False):
+    return {'tag_name': tag, 'draft': draft, 'prerelease': False, 'target_commitish': sha}
+
+
+class Existing(unittest.TestCase):
+    def test_no_release_means_create(self):
+        self.assertEqual(release.existing_release('v1.0.0', 'abc', [published('v0.9.0', 'old')]), 'create')
+
+    def test_published_at_this_commit_means_done(self):
+        self.assertEqual(release.existing_release('v1.0.0', 'abc', [published('v1.0.0', 'abc')]), 'done')
+
+    def test_published_elsewhere_is_refused(self):
+        with self.assertRaises(release.ReleaseError):
+            release.existing_release('v1.0.0', 'abc', [published('v1.0.0', 'def')])
+
+    def test_a_draft_is_refused(self):
+        with self.assertRaises(release.ReleaseError):
+            release.existing_release('v1.0.0', 'abc', [published('v1.0.0', 'abc', draft=True)])
+
+    def test_a_published_release_beside_a_draft_is_refused(self):
+        with self.assertRaises(release.ReleaseError):
+            release.existing_release('v1.0.0', 'abc', [published('v1.0.0', 'abc'), published('v1.0.0', 'abc', draft=True)])
+
+
 class Caller(unittest.TestCase):
     def test_the_stub_passes(self):
         self.assertEqual(release.caller_problems(STUB), [])
@@ -203,6 +230,17 @@ class Caller(unittest.TestCase):
         no_publish = STUB.replace('stage: publish', 'stage: ship')
         self.assertEqual(release.caller_problems(no_publish),
                          ['the workflow must have exactly one mach-release publish job, found 0'])
+
+    def test_concurrency_is_required(self):
+        cases = {
+            'missing': STUB.replace('concurrency:\n  group: release-${{ github.ref }}\n  cancel-in-progress: false\n', ''),
+            'cancelling': STUB.replace('cancel-in-progress: false', 'cancel-in-progress: true'),
+            'not on the ref': STUB.replace('release-${{ github.ref }}', 'release'),
+        }
+        for label, text in cases.items():
+            with self.subTest(label):
+                self.assertEqual(release.caller_problems(text),
+                                 ['the workflow must set concurrency to a group on github.ref with cancel-in-progress: false'])
 
     def test_another_workflow_of_the_same_name_does_not_count(self):
         text = STUB.replace('briar-systems/.github/.github/workflows/mach-release.yml@main',

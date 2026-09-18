@@ -127,23 +127,25 @@ jobs:
         env:
           VERSION: ${{ steps.verify.outputs.version }}
         run: python3 toolkit/.github/mach-release/release.py assets "$RUNNER_TEMP/assets" "$VERSION" "$RUNNER_TEMP/assets.txt"
-      - name: no release exists for the tag
+      # a tag push can be delivered twice, so a run that finds the tag already
+      # published at this commit by an earlier run ends green with nothing to do
+      - name: a release for the tag
+        id: existing
         env:
           TAG: ${{ steps.verify.outputs.tag }}
         run: |
           set -euo pipefail
-          gh api --paginate "repos/$REPO/releases" --jq '.[] | {tag_name, draft, prerelease}' | jq -s . > "$RUNNER_TEMP/releases.json"
-          if jq -e --arg tag "$TAG" 'any(.[]; .tag_name == $tag)' "$RUNNER_TEMP/releases.json" > /dev/null; then
-            echo "::error::a release or draft for $TAG already exists; delete it or release a new version"
-            exit 1
-          fi
+          gh api --paginate "repos/$REPO/releases" --jq '.[] | {tag_name, draft, prerelease, target_commitish}' | jq -s . > "$RUNNER_TEMP/releases.json"
+          python3 toolkit/.github/mach-release/release.py existing "$TAG" "$GITHUB_SHA" "$RUNNER_TEMP/releases.json"
       - name: latest or not
+        if: steps.existing.outputs.action == 'create'
         id: latest
         env:
           VERSION: ${{ steps.verify.outputs.version }}
           TAG: ${{ steps.verify.outputs.tag }}
         run: python3 toolkit/.github/mach-release/release.py latest "$VERSION" "$TAG" "$RUNNER_TEMP/releases.json"
       - name: draft the release with every asset
+        if: steps.existing.outputs.action == 'create'
         id: draft
         env:
           TAG: ${{ steps.verify.outputs.tag }}
@@ -170,6 +172,7 @@ jobs:
               "https://uploads.github.com/repos/$REPO/releases/$id/assets?name=$name" --input "$RUNNER_TEMP/assets/$name" --jq .name
           done < "$RUNNER_TEMP/assets.txt"
       - name: the draft holds exactly the assets
+        if: steps.existing.outputs.action == 'create'
         env:
           ID: ${{ steps.draft.outputs.id }}
         run: |
@@ -180,7 +183,7 @@ jobs:
           body=$(gh api "repos/$REPO/releases/$ID" --jq .body)
           [ "$body" = "$(cat "$RUNNER_TEMP/notes.md")" ] || { echo "::error::the draft's notes differ from the changelog section"; exit 1; }
       - name: publish
-        if: steps.verify.outputs.rehearsal != 'true'
+        if: steps.existing.outputs.action == 'create' && steps.verify.outputs.rehearsal != 'true'
         env:
           ID: ${{ steps.draft.outputs.id }}
           LATEST: ${{ steps.latest.outputs.latest }}
