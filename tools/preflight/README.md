@@ -28,7 +28,7 @@ Output, clones, the seed and per-repo logs go to `.wt/preflight-<tag>/`, which i
 
 Sample hooks can depend on things that exist only on a hosted runner. When a step fails, read its log before treating the failure as real:
 
-- `mach-tls` `setup.sh` runs `sudo apt-get install gnutls-bin`. If the package is already installed, pass `--path <dir>` with a `sudo` stub in that directory
+- `mach-tls` `setup.sh` runs `sudo apt-get install gnutls-bin`. If the package is already installed, pass `--path <dir>` with a `sudo` stub in that directory. On a host without `apt-get` the stub has to swallow the install rather than exec it: `case "$1" in apt-get) exit 0;; esac; exec "$@"`
 - `boom` and `mach-glfw` `verify.sh` need `xvfb-run`
 - `hedge` `verify.sh` binds `127.0.0.1:19100` through `19105`, which fails while anything else holds those ports
 - `mach-tls` `verify.sh` runs its interop server on `127.0.0.1:9443`, the same port `hedge`'s interop stack uses. While anything else holds it, every server cell reports `FAILED`
