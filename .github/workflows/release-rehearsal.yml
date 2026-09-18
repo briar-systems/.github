@@ -11,6 +11,12 @@ on:
 permissions:
   contents: read
 
+# one tag push can be delivered twice; the second run waits for the first and
+# then finds the release already published
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   verify:
     uses: ./.github/workflows/mach-release.yml

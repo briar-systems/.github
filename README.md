@@ -192,6 +192,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   verify:
     uses: briar-systems/.github/.github/workflows/mach-release.yml@main
@@ -241,13 +245,15 @@ It outputs `version`, `tag` and `rehearsal` for the caller's own jobs.
 
 `stage: publish` runs last. It rechecks everything from the same commit rather than trusting passed values. It then:
 
-1. reads the caller's workflow file and fails unless the publish job needs every other job, one job calls `./.github/workflows/ci.yml` with `heavy: all`, and every job other than verify needs verify
+1. reads the caller's workflow file and fails unless the publish job needs every other job, one job calls `./.github/workflows/ci.yml` with `heavy: all`, every job other than verify needs verify, and the workflow sets `concurrency` to a group on `github.ref` with `cancel-in-progress: false`
 2. collects the assets and fails unless they are exactly the declared set. It adds `SHA256SUMS` over them
-3. fails when a release or draft for the tag already exists
+3. looks for a release carrying the tag. None means create. One published at this commit means an earlier run already did the work, so the stage ends green with nothing to do. A draft, or a release from another commit, fails
 4. drafts the release, titled with the tag, with the changelog section as its notes and every asset attached
 5. checks that the draft holds exactly those assets and notes, then publishes it
 
 A version with a prerelease part is published as a prerelease. A stable release is marked latest only if it is at least every published stable release, so a backport to an older line never takes latest.
+
+GitHub occasionally delivers one tag push twice, and mach-quic's v0.13.2 got two runs from one `git push origin v0.13.2`. The `concurrency` group makes the second run wait for the first, and the existing-release check then ends it green. A release never runs twice, and a duplicate never leaves a draft.
 
 A `workflow_dispatch` rehearses the same path. The tag is `v<version>-rehearsal.<run id>`, which is never pushed, and the draft is a prerelease that is deleted once it is checked. The rehearsal needs no tag, and it proves the gates, the build and the upload before a real tag is pushed.
 
