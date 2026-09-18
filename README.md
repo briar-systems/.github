@@ -8,7 +8,7 @@ The family CI contract:
 
 - each repo has one `.github/workflows/ci.yml`, and a release workflow where one exists
 - a pull request into `dev` runs the light tier, a pull request into `main` runs every tier, and `workflow_dispatch` pulls named heavy work onto any ref
-- nothing runs on push, and nothing runs on a schedule. Deploy-only workflows are the exception, and so is `release.yml` on a `v*` tag push (see [Releases](#releases))
+- nothing runs on push, and nothing runs on a schedule. Deploy-only workflows are the exception, and so is `cd.yml` on a `v*` tag push (see [Releases](#releases))
   - a `pull_request` build tests the merge result, not the branch tip, so merging a green pull request verifies the merged state as it was at that moment. That is why no push trigger is needed
   - if the base moved after the last run, that merged state was never built. `dev` accepts this: the next pull request's merge-result build includes it, so a bad merge shows up at once and costs one fix
   - `main` is deliberately not held to a stricter rule. `main` is ahead of `dev` by every past release merge, so requiring up-to-date branches would leave every release pull request permanently behind and force a back-merge step. The admin merges that cut releases bypass such a check anyway
@@ -179,7 +179,7 @@ A hook switches on `MACH_CI_LEG` for per-host work. It reads `MACH_CI_TIER` or `
 
 ### Releases
 
-A release is a pushed `v*` tag, and `mach-release.yml` publishes it. A called workflow cannot call its caller's `ci.yml`, so the caller's `release.yml` runs the shared workflow twice, around its own full CI:
+A release is a pushed `v*` tag, and `mach-release.yml` publishes it. A called workflow cannot call its caller's `ci.yml`, so the caller's `cd.yml` runs the shared workflow twice, around its own full CI. The file is `.github/workflows/cd.yml` in every repo:
 
 ```yaml
 name: Release
