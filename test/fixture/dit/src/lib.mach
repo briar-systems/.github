@@ -1,0 +1,23 @@
+# a library whose test binary links a secret multiply, so on aarch64 std's
+# start requires FEAT_DIT and refuses on a processor without it. the shared
+# workflow's `dit: required` is what makes this test start on such a runner.
+
+use std.runtime;
+use std.system.dit;
+
+# a product the compiler must keep constant time
+#[oblivious]
+pub fun multiply(a: ^u64, b: ^u64) ^u64 {
+    ret a * b;
+}
+
+test "ditfixture.multiply: the secret product is the product" {
+    val six:   u64  = 6;
+    val seven: u64  = 7;
+    val x:     ^u64 = six;
+    val y:     ^u64 = seven;
+    if (multiply(x, y):>u64 != 42) {
+        ret 1;
+    }
+    ret 0;
+}

@@ -1,4 +1,6 @@
 import importlib.util
+import os
+import unittest.mock
 from pathlib import Path
 import tempfile
 import unittest
@@ -152,6 +154,67 @@ class Expand(unittest.TestCase):
     def test_a_project_matched_twice_is_refused(self):
         with self.assertRaises(run.ExpandError):
             self.expand(sub('examples/alpha'), sub('examples/*'))
+
+
+N1_CPUINFO = 'processor\t: 0\nBogoMIPS\t: 50.00\nFeatures\t: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm lrcpc dcpop asimddp ssbs\nCPU implementer\t: 0x41\n'
+N2_CPUINFO = 'processor\t: 0\nFeatures\t: fp asimd aes sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 sm3 sm4 asimddp sha512 sve asimdfhm dit uscat ilrcpc flagm ssbs sb paca pacg dcpodp sve2 i8mm bf16 dgh\nCPU implementer\t: 0x41\n'
+X86_CPUINFO = 'processor\t: 0\nvendor_id\t: GenuineIntel\nflags\t: fpu vme de dit\n'
+DARWIN = {'name': 'darwin-aarch64', 'isa': 'aarch64', 'os': 'darwin'}
+X86 = {'name': 'linux-x86_64', 'isa': 'x86_64', 'os': 'linux'}
+
+
+class Dit(unittest.TestCase):
+    def mechanism(self, dit='required', test=True, leg_test=True, runner='', host=HOST, has_dit=False):
+        config = {'dit': dit, 'test': test}
+        return run.dit_mechanism(config, dict(leg(test=leg_test), runner=runner), host, has_dit)
+
+    def test_cpuinfo_features_carry_the_flag(self):
+        self.assertFalse(run.cpuinfo_has_dit(N1_CPUINFO))
+        self.assertTrue(run.cpuinfo_has_dit(N2_CPUINFO))
+        # only the aarch64 Features line counts, and only as a whole word
+        self.assertFalse(run.cpuinfo_has_dit(X86_CPUINFO))
+        self.assertFalse(run.cpuinfo_has_dit('Features\t: fp editor\n'))
+
+    def test_not_required_is_none(self):
+        self.assertEqual(self.mechanism(dit='none')[0], 'none')
+
+    def test_no_tests_means_nothing_to_do(self):
+        self.assertEqual(self.mechanism(test=False)[0], 'none')
+        self.assertEqual(self.mechanism(leg_test=False)[0], 'none')
+
+    def test_a_leg_with_its_own_runner_is_left_alone(self):
+        path, reason = self.mechanism(runner='qemu-aarch64')
+        self.assertEqual(path, 'runner')
+        self.assertIn('qemu-aarch64', reason)
+
+    def test_other_isas_run_natively(self):
+        self.assertEqual(self.mechanism(host=X86)[0], 'native')
+
+    def test_a_processor_with_the_mode_runs_natively(self):
+        self.assertEqual(self.mechanism(has_dit=True)[0], 'native')
+        self.assertEqual(self.mechanism(host=DARWIN, has_dit=True)[0], 'native')
+
+    def test_a_linux_processor_without_the_mode_is_emulated(self):
+        path, reason = self.mechanism()
+        self.assertEqual(path, 'emulated')
+        self.assertIn('qemu-aarch64 -cpu max', reason)
+
+    def test_no_emulation_elsewhere(self):
+        with self.assertRaises(run.DitError):
+            self.mechanism(host=DARWIN)
+
+    @unittest.skipUnless(os.name == 'posix', 'the wrapper is a shell script on a linux runner')
+    def test_the_wrapper_runs_qemu_with_the_model(self):
+        with tempfile.TemporaryDirectory() as temp:
+            env = dict(os.environ, RUNNER_TEMP=temp, PATH=temp + os.pathsep + os.environ['PATH'])
+            with unittest.mock.patch.dict(os.environ, env):
+                wrapper = Path(temp) / 'qemu-aarch64'
+                wrapper.write_text('#!/bin/sh\necho "$@"\n')
+                wrapper.chmod(0o755)
+                path = run.dit_runner()
+            self.assertTrue(path.startswith(temp))
+            self.assertIn('exec qemu-aarch64 -cpu max "$@"', Path(path).read_text())
+            self.assertTrue(os.access(path, os.X_OK))
 
 
 if __name__ == '__main__':

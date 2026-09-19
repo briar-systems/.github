@@ -103,6 +103,9 @@ def normalize_leg(entry, timeout):
 
 
 DEPS_MODES = ('pull', 'update', 'none')
+# what the project's binaries need of the processor: `required` means the
+# link admits a secret multiply and std's start refuses without FEAT_DIT
+DIT_MODES = ('none', 'required')
 
 
 def deps_mode(kind, name, value):
@@ -224,9 +227,13 @@ def plan(inputs, base_ref, root):
     deps = deps_mode('project', inputs['project'], inputs['deps'])
     if deps == 'none':
         raise PlanError('project ' + inputs['project'] + ' builds, so deps must be pull or update')
+    check_type('input', 'dit', inputs['dit'], str)
+    if inputs['dit'] not in DIT_MODES:
+        raise PlanError('dit must be one of ' + ', '.join(DIT_MODES))
     config = {
         'project': inputs['project'],
         'deps': deps,
+        'dit': inputs['dit'],
         'profiles': profiles,
         'test': inputs['test'],
         'fmt': inputs['fmt'],
@@ -258,6 +265,7 @@ def main():
         'subprojects': env['PLAN_SUBPROJECTS'] or '[]',
         'project': env['PLAN_PROJECT'],
         'deps': env['PLAN_DEPS'] or 'pull',
+        'dit': env['PLAN_DIT'] or 'none',
         'hooks-dir': env['PLAN_HOOKS_DIR'],
         'test': boolean(env['PLAN_TEST']),
         'fmt': boolean(env['PLAN_FMT']),

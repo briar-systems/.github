@@ -20,6 +20,7 @@ def inputs(**overrides):
         'subprojects': '[]',
         'project': '.',
         'deps': 'pull',
+        'dit': 'none',
         'hooks-dir': '.github/ci',
         'test': True,
         'fmt': True,
@@ -161,6 +162,21 @@ class LegEnv(unittest.TestCase):
     def test_other_mach_names_pass(self):
         legs, _ = run('dev', legs='[{"name": "a", "runs-on": "x", "env": {"MACH_JOBS": "2", "_x1": ""}}]')
         self.assertEqual(legs[0]['env'], {'MACH_JOBS': '2', '_x1': ''})
+
+
+class Dit(unittest.TestCase):
+    def test_defaults_to_none(self):
+        _, config = run('dev')
+        self.assertEqual(config['dit'], 'none')
+
+    def test_required_passes(self):
+        _, config = run('dev', dit='required')
+        self.assertEqual(config['dit'], 'required')
+
+    def test_other_values_are_refused(self):
+        for value in ('yes', 'emulate', 'true'):
+            with self.subTest(value), self.assertRaises(plan.PlanError):
+                run('dev', dit=value)
 
 
 class Subprojects(unittest.TestCase):
