@@ -111,6 +111,7 @@ Every override is an input. There is nothing to fork.
 | `light-legs` | none | JSON array of leg names to run in the light tier. Only the repos ruled above use it |
 | `project` | `.` | the project directory, for a repo whose real project is not the root |
 | `deps` | `pull` | how the project's dependencies are resolved: `pull` realizes committed pins, `update` resolves version ranges with `mach dep update --all` |
+| `dit` | `none` | `required` when the project's binaries need the aarch64 data-independent-timing mode, see [DIT](#dit) |
 | `profiles` | `["debug", "release"]` | profiles to build and test. Any name works, and each leg checks that the manifests it builds declare it |
 | `test` | `true` | run `mach test` on the project |
 | `fmt` | `true` | `mach fmt --check` of the project and every subproject, in the light tier, once, on the primary leg |
@@ -172,12 +173,26 @@ The directory is reserved for those three names. Any other file there fails the 
 | `MACH_CI_HEAVY` | the heavy selection, `all` on a pull request into `main` |
 | `MACH_CI_PRIMARY` | `true` on the primary leg |
 | `MACH_CI_TARGET`, `MACH_CI_RUNNER` | the leg's target and runner |
+| `MACH_CI_DIT` | how the tests got FEAT_DIT: `none`, `native`, `emulated` or `runner`, see [DIT](#dit) |
 | `MACH_CI_PROJECT` | the project directory |
 | `MACH_CI_PROFILES` | the profiles, space separated |
 
 A hook switches on `MACH_CI_LEG` for per-host work. It reads `MACH_CI_TIER` or `MACH_CI_HEAVY` to hold expensive work to the heavy tier.
 
 **Extra jobs** are ordinary jobs in the caller. A heavy-only job uses `if: github.base_ref == 'main' || inputs.heavy == 'all' || inputs.heavy == '<name>'`, and `<name>` goes in the dispatch options. It can seed through `briar-systems/.github/.github/actions/seed-mach@main`. Every extra job goes in `gate`'s `needs:`.
+
+### DIT
+
+Since std 5.8.0 a program whose link admits a secret multiply (`#[oblivious]` on secret operands) starts on aarch64 only where the OS reports FEAT_DIT, and refuses otherwise with exit 255 (mach#3508, fail closed). Every test binary of such a project is such a program. GitHub's `ubuntu-24.04-arm` runner is Neoverse N1, which predates the mode, so on that leg the tests cannot start.
+
+The adopter declares the requirement with `dit: required` and the toolkit picks the mechanism, per leg, at job time:
+
+- on an aarch64 linux runner without FEAT_DIT in `/proc/cpuinfo`, the project's tests and every subproject test run under `qemu-aarch64 -cpu max`, which models the mode. The build stays native
+- on a runner that has the mode, aarch64 linux or darwin, the tests run natively, so a runner class with FEAT_DIT needs no change
+- on a leg with its own `runner`, the runner decides the processor model and the toolkit leaves it alone
+- on every other host the tests run natively, since the mode is aarch64 only
+
+The `dit` step logs which path it took, hooks read it as `MACH_CI_DIT`, and the test log shows the `--runner` when emulation is on. Emulation is functional coverage only: it proves the code is correct where the mode is on, not that it is constant time. Constant-time assurance stays the adopter's own job. A leg that tests natively on a runner that lacks the mode with no emulation for its OS fails at the `dit` step.
 
 ### Releases
 

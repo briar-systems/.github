@@ -133,6 +133,77 @@ def export_env(leg, config):
     mach('info')
 
 
+# the qemu processor model with FEAT_DIT; -cpu max is every feature qemu implements
+DIT_CPU = 'max'
+
+
+def cpuinfo_has_dit(cpuinfo):
+    # the kernel prints Features from the same HWCAP word std's start reads
+    for line in cpuinfo.splitlines():
+        key, _, value = line.partition(':')
+        if key.strip() == 'Features':
+            return 'dit' in value.split()
+    return False
+
+
+class DitError(ValueError):
+    pass
+
+
+def dit_mechanism(config, leg, host, has_dit):
+    """how the leg's tests get FEAT_DIT: (path, reason), path is none, native, runner or emulated"""
+    if config['dit'] != 'required':
+        return 'none', 'the project does not require DIT'
+    if not (config['test'] and leg['test']):
+        return 'none', 'no tests run on leg ' + leg['name']
+    if leg['runner']:
+        return 'runner', 'leg ' + leg['name'] + ' tests through ' + leg['runner'] + ', which decides the processor model'
+    if host['isa'] != 'aarch64':
+        return 'native', 'DIT is an aarch64 mode, ' + host['isa'] + ' tests run natively'
+    if has_dit:
+        return 'native', 'this ' + host['name'] + ' processor has FEAT_DIT, tests run natively'
+    if host['os'] == 'linux':
+        return 'emulated', 'this ' + host['name'] + ' processor lacks FEAT_DIT, tests run under qemu-aarch64 -cpu ' + DIT_CPU
+    raise DitError('this ' + host['name'] + ' processor lacks FEAT_DIT and the toolkit has no emulation for ' + host['os'])
+
+
+def host_has_dit(host):
+    if host['isa'] != 'aarch64':
+        return False
+    if host['os'] == 'linux':
+        return cpuinfo_has_dit(Path('/proc/cpuinfo').read_text())
+    if host['os'] == 'darwin':
+        sysctl = subprocess.run(['sysctl', '-n', 'hw.optional.arm.FEAT_DIT'], capture_output=True, text=True)
+        return sysctl.stdout.strip() == '1'
+    return False
+
+
+def dit_runner():
+    # a wrapper, because --runner takes a command with no arguments
+    if not shutil.which('qemu-aarch64'):
+        subprocess.run(['sudo', 'apt-get', 'update'], check=True)
+        subprocess.run(['sudo', 'apt-get', 'install', '-y', 'qemu-user'], check=True)
+    directory = Path(os.environ['RUNNER_TEMP']) / 'mach-lib-dit'
+    directory.mkdir(exist_ok=True)
+    wrapper = directory / 'qemu-aarch64-dit'
+    wrapper.write_text('#!/bin/sh\nexec qemu-aarch64 -cpu ' + DIT_CPU + ' "$@"\n')
+    wrapper.chmod(0o755)
+    return str(wrapper)
+
+
+def dit(leg, config):
+    found = host()
+    path, reason = dit_mechanism(config, leg, found, host_has_dit(found))
+    print('dit: ' + path + ', ' + reason)
+    values = {'MACH_CI_DIT': path}
+    if path == 'emulated':
+        values['MACH_LIB_DIT_RUNNER'] = dit_runner()
+    with open(os.environ['GITHUB_ENV'], 'a') as output:
+        for key, value in values.items():
+            output.write(key + '=' + value + '\n')
+            print(key + '=' + value)
+
+
 def resolve_deps(path, mode):
     # pull realizes committed pins; update resolves version ranges to the releases they select
     if mode == 'pull':
@@ -211,6 +282,7 @@ def all_targets(leg, config):
 PHASES = {
     'env': export_env,
     'manifests': check_manifests,
+    'dit': dit,
     'deps': deps,
     'build': build,
     'test': test,
@@ -223,10 +295,12 @@ PHASES = {
 def main():
     leg = json.loads(os.environ['MACH_LIB_LEG'])
     config = json.loads(os.environ['MACH_LIB_CONFIG'])
+    # the dit phase exports a runner when this processor lacks a mode the tests need
+    leg['runner'] = leg['runner'] or os.environ.get('MACH_LIB_DIT_RUNNER', '')
     try:
         config['subprojects'] = expand_subprojects(config['subprojects'])
         PHASES[sys.argv[1]](leg, config)
-    except ExpandError as error:
+    except (ExpandError, DitError) as error:
         print('::error::' + str(error))
         sys.exit(1)
     except subprocess.CalledProcessError as error:
