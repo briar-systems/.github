@@ -106,6 +106,8 @@ DEPS_MODES = ('pull', 'update', 'none')
 # what the project's binaries need of the processor: `required` means the
 # link admits a secret multiply and std's start refuses without FEAT_DIT
 DIT_MODES = ('none', 'required')
+# the actions/checkout submodules modes
+SUBMODULES_MODES = ('false', 'true', 'recursive')
 
 
 def deps_mode(kind, name, value):
@@ -230,10 +232,14 @@ def plan(inputs, base_ref, root):
     check_type('input', 'dit', inputs['dit'], str)
     if inputs['dit'] not in DIT_MODES:
         raise PlanError('dit must be one of ' + ', '.join(DIT_MODES))
+    check_type('input', 'submodules', inputs['submodules'], str)
+    if inputs['submodules'] not in SUBMODULES_MODES:
+        raise PlanError('submodules must be one of ' + ', '.join(SUBMODULES_MODES))
     config = {
         'project': inputs['project'],
         'deps': deps,
         'dit': inputs['dit'],
+        'submodules': inputs['submodules'],
         'profiles': profiles,
         'test': inputs['test'],
         'fmt': inputs['fmt'],
@@ -266,6 +272,7 @@ def main():
         'project': env['PLAN_PROJECT'],
         'deps': env['PLAN_DEPS'] or 'pull',
         'dit': env['PLAN_DIT'] or 'none',
+        'submodules': env['PLAN_SUBMODULES'] or 'false',
         'hooks-dir': env['PLAN_HOOKS_DIR'],
         'test': boolean(env['PLAN_TEST']),
         'fmt': boolean(env['PLAN_FMT']),

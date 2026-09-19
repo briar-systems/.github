@@ -16,7 +16,7 @@ It needs `gh` (authenticated), `git`, and Python 3.11 or newer with PyYAML.
 3. It finds the adopters: every non-archived org repo whose `ci.yml` on `branch` references `mach-lib.yml@`, minus the `[exclude]` entries.
 4. It clones each adopter shallowly. It checks out submodules only when the adopter's `submodules` input asks for them, as `actions/checkout` does. Initializing them recursively would realize nested `dep/` trees, and `mach dep pull` refuses those.
 5. It reads the adopter's `lib` inputs and plans them as a pull request into `dev` and into `main`. Then it runs fmt on the project and its subprojects, and the manifests check for every leg. Each leg's host comes from `[hosts]`. It also reports any committed symlink at or under a `dep` directory.
-6. For each repo in `[sample]`, it runs the primary leg's phases (`env`, `manifests`, `dit`, `setup.sh`, `deps`, `build`, `test`, `subprojects`, `fmt`, `all-targets`, `verify.sh`, `teardown.sh`) the way `mach-lib.yml` does for a pull request into `main`. Afterwards it checks that no `dep` symlink appeared.
+6. For each repo in `[sample]`, it runs the primary leg's phases (`submodule-tags`, `env`, `manifests`, `dit`, `setup.sh`, `deps`, `build`, `test`, `subprojects`, `fmt`, `all-targets`, `verify.sh`, `teardown.sh`) the way `mach-lib.yml` does for a pull request into `main`. Afterwards it checks that no `dep` symlink appeared.
 
 Output, clones, the seed and per-repo logs go to `.wt/preflight-<tag>/`, which is ignored.
 

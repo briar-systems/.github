@@ -204,6 +204,51 @@ def dit(leg, config):
             print(key + '=' + value)
 
 
+RELEASE_TAG = re.compile(r'refs/tags/(v\d+\.\d+\.\d+[^^]*?)(\^\{\})?')
+
+
+def release_tags(ls_remote, commit):
+    """the v tags at `commit` in `git ls-remote --tags` output"""
+    lines = []
+    for line in ls_remote.splitlines():
+        sha, _, ref = line.partition('\t')
+        match = RELEASE_TAG.fullmatch(ref)
+        if match:
+            lines.append((match.group(1), bool(match.group(2)), sha))
+    # an annotated tag's plain line is the tag object, its peeled line is the commit
+    annotated = {tag for tag, peeled, _ in lines if peeled}
+    return [tag for tag, peeled, sha in lines if sha == commit and (peeled or tag not in annotated)]
+
+
+def parse_submodule_status(text):
+    """(path, pinned commit) per line of `git submodule status`"""
+    found = []
+    for line in text.splitlines():
+        # the first column is a state mark or a space, then the commit and the path
+        fields = line[1:].split()
+        if len(fields) >= 2:
+            found.append((fields[1], fields[0]))
+    return found
+
+
+def git(*args, cwd=None):
+    return subprocess.run(['git', *args], check=True, cwd=cwd, capture_output=True, text=True).stdout
+
+
+def submodule_tags(leg, config):
+    # a shallow checkout carries no tags, and a dependency selected by version
+    # verifies against the release tag on its pinned commit, read from the
+    # checkout's own refs. fetch exactly that tag for every submodule
+    if config['submodules'] == 'false':
+        return skip('the checkout has no submodules')
+    recursive = ['--recursive'] if config['submodules'] == 'recursive' else []
+    for path, commit in parse_submodule_status(git('submodule', 'status', *recursive)):
+        tags = release_tags(git('ls-remote', '--tags', 'origin', cwd=path), commit)
+        for tag in tags:
+            git('fetch', '--depth=1', '--no-tags', 'origin', 'tag', tag, cwd=path)
+        print('submodule ' + path + ' at ' + commit[:7] + (' is release ' + ', '.join(tags) if tags else ' carries no release tag'))
+
+
 def resolve_deps(path, mode):
     # pull realizes committed pins; update resolves version ranges to the releases they select
     if mode == 'pull':
@@ -280,6 +325,7 @@ def all_targets(leg, config):
 
 
 PHASES = {
+    'submodule-tags': submodule_tags,
     'env': export_env,
     'manifests': check_manifests,
     'dit': dit,

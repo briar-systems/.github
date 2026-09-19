@@ -21,6 +21,7 @@ def inputs(**overrides):
         'project': '.',
         'deps': 'pull',
         'dit': 'none',
+        'submodules': 'false',
         'hooks-dir': '.github/ci',
         'test': True,
         'fmt': True,
@@ -177,6 +178,18 @@ class Dit(unittest.TestCase):
         for value in ('yes', 'emulate', 'true'):
             with self.subTest(value), self.assertRaises(plan.PlanError):
                 run('dev', dit=value)
+
+
+class Submodules(unittest.TestCase):
+    def test_the_checkout_modes_pass(self):
+        for mode in ('false', 'true', 'recursive'):
+            _, config = run('dev', submodules=mode)
+            self.assertEqual(config['submodules'], mode)
+
+    def test_other_values_are_refused(self):
+        for value in ('yes', 'True', ''):
+            with self.subTest(value), self.assertRaises(plan.PlanError):
+                run('dev', submodules=value)
 
 
 class Subprojects(unittest.TestCase):

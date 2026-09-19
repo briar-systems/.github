@@ -49,7 +49,8 @@ class LibInputs(unittest.TestCase):
         self.assertTrue(inputs['test'])
         self.assertEqual(json.loads(inputs['legs']), plan.DEFAULT_LEGS)
         self.assertEqual(inputs['skip-legs'], '["x86_64-windows"]')
-        self.assertEqual(extra, {'submodules': 'recursive', 'mach-version': ''})
+        self.assertEqual(inputs['submodules'], 'recursive')
+        self.assertEqual(extra, {'mach-version': ''})
 
     def test_the_inputs_plan(self):
         inputs, _ = preflight.lib_inputs(WORKFLOW, plan)
