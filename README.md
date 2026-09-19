@@ -118,7 +118,7 @@ Every override is an input. There is nothing to fork.
 | `all-targets` | `true` | release build of every manifest target, once, on the primary leg |
 | `subprojects` | none | JSON array of other projects to resolve, build and test |
 | `hooks-dir` | `.github/ci` | where the repo's hooks live |
-| `submodules` | `false` | the `actions/checkout` submodules mode |
+| `submodules` | `false` | the `actions/checkout` submodules mode. With `true` or `recursive`, the leg fetches each submodule's release tag before anything else, see below |
 | `mach-version` | the family pin | a release tag, or `latest` |
 | `evidence` | none | paths uploaded as `evidence-<leg>` whatever the outcome |
 | `timeout-minutes` | `40` | default leg timeout |
@@ -136,6 +136,8 @@ A **leg** is `{"name", "runs-on"}` plus these optional keys:
 | `env` | none | string map exported to every step. Names must be shell variable names, values one line, and `MACH_COMPILER`, `MACH_CI_*` and `MACH_LIB_*` belong to the toolkit |
 | `test` | `true` | `false` makes the leg build-only |
 | `timeout` | `timeout-minutes` | leg timeout |
+
+**Submodule release tags.** The checkout is shallow, so a submodule carries no tags, while a dependency selected by `version` verifies against the release tag on its pinned commit, which `mach dep verify` reads from the checkout's own refs. When `submodules` is on, the `submodule tags` step asks each submodule's origin which `v` tags point at the pinned commit and fetches exactly those, never every tag, and logs the release each submodule is or that it carries none. A repo that resolves deps with `deps: pull` and no submodules is unaffected: mach realizes the clone itself, tags included.
 
 Before anything builds, each leg reads the manifest of the project and of every subproject it builds or tests. It fails when one declares no profile the leg uses, or no target named by the leg's `target`. A manifest the leg tests must also declare a target for the leg's host. A build-only project, such as a spirv-only shader, may target another platform. Without that check, mach falls back to a `default = true` target and the tests run a binary the host cannot execute.
 
