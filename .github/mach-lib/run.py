@@ -133,14 +133,22 @@ def export_env(leg, config):
     mach('info')
 
 
+def resolve_deps(path, mode):
+    # pull realizes committed pins; update resolves version ranges to the releases they select
+    if mode == 'pull':
+        mach('dep', 'pull', path)
+    if mode == 'update':
+        mach('dep', 'update', path, '--all')
+
+
 def deps(leg, config):
-    mach('dep', 'pull', config['project'])
+    resolve_deps(config['project'], config['deps'])
     for sub in config['subprojects']:
-        if not (sub['pull'] and applies(sub, leg)):
+        if not (sub['deps'] != 'none' and applies(sub, leg)):
             continue
         if sub['clean-dep']:
             shutil.rmtree(Path(sub['path']) / 'dep', ignore_errors=True)
-        mach('dep', 'pull', sub['path'])
+        resolve_deps(sub['path'], sub['deps'])
 
 
 def build(leg, config):

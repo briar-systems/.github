@@ -77,6 +77,7 @@ def lib_inputs(workflow_text, plan):
         'profiles': get('profiles', '') or '["debug", "release"]',
         'subprojects': get('subprojects', '') or '[]',
         'project': get('project', '.'),
+        'deps': get('deps', 'pull'),
         'hooks-dir': get('hooks-dir', '.github/ci'),
         'test': flag('test'),
         'fmt': flag('fmt'),
