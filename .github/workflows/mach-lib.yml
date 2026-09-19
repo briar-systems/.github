@@ -116,6 +116,7 @@ jobs:
           PLAN_PROJECT: ${{ inputs.project }}
           PLAN_DEPS: ${{ inputs.deps }}
           PLAN_DIT: ${{ inputs.dit }}
+          PLAN_SUBMODULES: ${{ inputs.submodules }}
           PLAN_HOOKS_DIR: ${{ inputs.hooks-dir }}
           PLAN_TEST: ${{ inputs.test }}
           PLAN_FMT: ${{ inputs.fmt }}
@@ -153,6 +154,11 @@ jobs:
           sparse-checkout: |
             .github/actions
             .github/mach-lib
+      # a shallow submodule carries no tags, and a dependency selected by version
+      # verifies against the release tag on its pinned commit
+      - name: submodule tags
+        if: inputs.submodules != 'false'
+        run: python "$MACH_LIB_RUN" submodule-tags
       - name: apt packages
         if: join(matrix.leg.apt, ' ') != ''
         env:

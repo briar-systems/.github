@@ -217,5 +217,40 @@ class Dit(unittest.TestCase):
             self.assertTrue(os.access(path, os.X_OK))
 
 
+LS_REMOTE = (
+    'aaaa\trefs/tags/v3.0.1\n'
+    'bbbb\trefs/tags/v5.8.0\n'
+    'cccc\trefs/tags/v5.8.0^{}\n'
+    'cccc\trefs/tags/v5.8.0-rc1^{}\n'
+    'cccc\trefs/tags/nightly\n'
+    'cccc\trefs/tags/nightly^{}\n'
+    'dddd\trefs/tags/v5.9.0^{}\n'
+)
+
+
+class SubmoduleTags(unittest.TestCase):
+    def test_an_annotated_tag_matches_by_its_peeled_line(self):
+        self.assertEqual(run.release_tags(LS_REMOTE, 'cccc'), ['v5.8.0', 'v5.8.0-rc1'])
+
+    def test_a_lightweight_tag_matches_directly(self):
+        self.assertEqual(run.release_tags(LS_REMOTE, 'aaaa'), ['v3.0.1'])
+
+    def test_the_tag_object_is_not_the_commit(self):
+        self.assertEqual(run.release_tags(LS_REMOTE, 'bbbb'), [])
+
+    def test_only_v_tags_are_releases(self):
+        self.assertEqual(run.release_tags('cccc\trefs/tags/nightly\ncccc\trefs/tags/nightly^{}\n', 'cccc'), [])
+
+    def test_submodule_status_gives_path_and_commit(self):
+        status = (' 04076e3cc6be8c5f8b9f3cfb10a1f9d213d519c1 dep/std (v5.8.0)\n'
+                  '-edda4a039c4a5c926323328d5a1a4c8eb25608a7 dep/mach\n'
+                  '+1111111111111111111111111111111111111111 dep/std/dep/x (heads/main)\n')
+        self.assertEqual(run.parse_submodule_status(status), [
+            ('dep/std', '04076e3cc6be8c5f8b9f3cfb10a1f9d213d519c1'),
+            ('dep/mach', 'edda4a039c4a5c926323328d5a1a4c8eb25608a7'),
+            ('dep/std/dep/x', '1111111111111111111111111111111111111111')])
+        self.assertEqual(run.parse_submodule_status(''), [])
+
+
 if __name__ == '__main__':
     unittest.main()
