@@ -62,6 +62,27 @@ class LibInputs(unittest.TestCase):
             preflight.lib_inputs('jobs:\n  gate:\n    runs-on: ubuntu-latest\n', plan)
 
 
+class Discovery(unittest.TestCase):
+    def run_with(self, returncode, stdout='', stderr=''):
+        import subprocess
+        real = preflight.subprocess.run
+        preflight.subprocess.run = lambda *a, **k: subprocess.CompletedProcess(a, returncode, stdout, stderr)
+        try:
+            return preflight.workflow_text('org', 'repo', 'dev')
+        finally:
+            preflight.subprocess.run = real
+
+    def test_a_present_workflow_is_returned(self):
+        self.assertEqual(self.run_with(0, 'jobs: {}\n'), 'jobs: {}\n')
+
+    def test_a_missing_workflow_means_not_an_adopter(self):
+        self.assertIsNone(self.run_with(1, stderr='gh: Not Found (HTTP 404)'))
+
+    def test_any_other_failure_raises(self):
+        with self.assertRaises(RuntimeError):
+            self.run_with(1, stderr='error connecting to api.github.com')
+
+
 class DepSymlinks(unittest.TestCase):
     def test_committed_symlinks_at_or_under_dep(self):
         listing = '\n'.join([

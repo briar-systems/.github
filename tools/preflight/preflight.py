@@ -153,19 +153,29 @@ def seed(toolkit, tag, work, org):
     return compiler, asset + ' sha256 ' + digest
 
 
+def workflow_text(org, name, branch):
+    """the repo's ci.yml on the branch, or None when the repo has none; any other failure raises"""
+    result = subprocess.run(['gh', 'api', '-H', 'Accept: application/vnd.github.raw',
+                             'repos/' + org + '/' + name + '/contents/.github/workflows/ci.yml?ref=' + branch],
+                            capture_output=True, text=True)
+    if result.returncode == 0:
+        return result.stdout
+    if 'HTTP 404' in result.stderr:
+        return None
+    raise RuntimeError('could not read ' + name + ' ci.yml: ' + result.stderr.strip()[-400:])
+
+
 def adopters(config):
+    # a repo is only skipped when it has no ci.yml on the branch; a transient
+    # failure raises rather than silently narrowing the preflight
     org, branch = config['org'], config['branch']
     names = sh('gh', 'repo', 'list', org, '-L', '500', '--no-archived', '--json', 'name', '--jq', '.[].name').split()
     found = {}
     for name in sorted(names):
         if name == '.github':
             continue
-        try:
-            text = sh('gh', 'api', '-H', 'Accept: application/vnd.github.raw',
-                      'repos/' + org + '/' + name + '/contents/.github/workflows/ci.yml?ref=' + branch)
-        except RuntimeError:
-            continue
-        if LIB_JOB in text:
+        text = workflow_text(org, name, branch)
+        if text is not None and LIB_JOB in text:
             found[name] = text
     return found
 
