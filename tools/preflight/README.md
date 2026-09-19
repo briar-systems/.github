@@ -20,6 +20,12 @@ It needs `gh` (authenticated), `git`, and Python 3.11 or newer with PyYAML.
 
 Output, clones, the seed and per-repo logs go to `.wt/preflight-<tag>/`, which is ignored.
 
+To prove a toolkit change on an adopter branch, or on a `ci.yml` that opts into a new input before the adopter has committed it, point the tool at a checkout of your own instead of its `dev`. The checks and the sample then run there, reading `ci.yml` from that checkout, and the repo is sampled whether or not it is in `[sample]`:
+
+```sh
+python3 tools/preflight/preflight.py --toolkit feat/80 --repos boom --local boom=.wt/boom-184
+```
+
 ## Configuration
 
 `preflight.toml` holds the exclusions and their reasons, the sample set, and the map from `runs-on` labels to hosts. When an adopter uses a new runner label, the preflight reports it as a problem until the label is added there.

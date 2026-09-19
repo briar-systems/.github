@@ -228,11 +228,11 @@ def check(toolkit, config, compiler, root, inputs):
     return problems, [e['leg']['name'] for e in matrix['include']]
 
 
-def sample(toolkit, compiler, root, inputs, work, env_path):
+def sample(toolkit, compiler, name, root, inputs, work, env_path):
     """the primary leg's phases and hooks, as mach-lib.yml runs them on a pull request into main"""
     matrix, plan_config = toolkit.plan.plan(dict(inputs), 'main', str(root))
     leg = next(e['leg'] for e in matrix['include'] if e['leg']['primary'])
-    temp = work / 'runner' / root.name
+    temp = work / 'runner' / name
     if temp.exists():
         remove_tree(temp)
     temp.mkdir(parents=True)
@@ -242,7 +242,7 @@ def sample(toolkit, compiler, root, inputs, work, env_path):
                GITHUB_BASE_REF='main', RUNNER_TEMP=str(temp), RUNNER_OS=platform.system())
     if env_path:
         env['PATH'] = env_path + os.pathsep + env['PATH']
-    log = (work / 'logs' / (root.name + '.log')).open('w')
+    log = (work / 'logs' / (name + '.log')).open('w')
     steps = []
 
     def step(label, command):
@@ -282,6 +282,9 @@ def main():
     parser.add_argument('--repos', nargs='*', help='only these adopters')
     parser.add_argument('--no-sample', action='store_true', help='skip the end to end sample legs')
     parser.add_argument('--path', default='', help='directory prepended to PATH for sample hooks')
+    parser.add_argument('--local', action='append', default=[], metavar='NAME=PATH',
+                        help='use this checkout for the adopter instead of cloning its dev, reading ci.yml from it; '
+                             'for proving a toolkit change on a branch or an edited ci.yml')
     args = parser.parse_args()
 
     pin = sh('git', 'show', args.toolkit + ':.github/actions/seed-mach/version', cwd=REPO).strip()
@@ -293,7 +296,15 @@ def main():
     print('toolkit ' + args.toolkit + ' (' + toolkit.sha + '), pin ' + toolkit.pin)
     print('seed ' + tag + ': ' + provenance)
 
+    local = {}
+    for item in args.local:
+        name, _, path = item.partition('=')
+        if not (name and path):
+            sys.exit('--local takes NAME=PATH, got ' + item)
+        local[name] = Path(path).resolve()
     found = adopters(config)
+    for name, path in local.items():
+        found[name] = (path / '.github/workflows/ci.yml').read_text()
     excluded = config.get('exclude', {})
     for name in sorted(set(found) & set(excluded)):
         print('excluded ' + name + ': ' + excluded[name])
@@ -311,8 +322,12 @@ def main():
         extra, head = {}, '?'
         try:
             inputs, extra = lib_inputs(found[name], toolkit.plan)
-            root = work / 'repos' / name
-            head = clone(config['org'], name, config['branch'], extra['submodules'], root)
+            if name in local:
+                root = local[name]
+                head = sh('git', 'rev-parse', '--short', 'HEAD', cwd=root).strip() + ' (local)'
+            else:
+                root = work / 'repos' / name
+                head = clone(config['org'], name, config['branch'], extra['submodules'], root)
             roots[name] = (root, inputs)
             problems, legs = check(toolkit, config, compiler, root, inputs)
         except (RuntimeError, ValueError, OSError) as error:
@@ -325,11 +340,11 @@ def main():
             failed.append(name)
 
     if not args.no_sample:
-        for name in config['sample']['repos']:
+        for name in list(config['sample']['repos']) + [name for name in local if name not in config['sample']['repos']]:
             if name not in roots or name in failed:
                 continue
             root, inputs = roots[name]
-            leg, ok, steps = sample(toolkit, compiler, root, inputs, work, args.path)
+            leg, ok, steps = sample(toolkit, compiler, name, root, inputs, work, args.path)
             print(('PASS ' if ok else 'FAIL ') + name + ' sample ' + leg + ': '
                   + ' '.join(label if passed else label.upper() + '!' for label, passed in steps))
             if not ok:
