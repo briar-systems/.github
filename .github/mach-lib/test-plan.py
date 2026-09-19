@@ -19,6 +19,7 @@ def inputs(**overrides):
         'profiles': '["debug", "release"]',
         'subprojects': '[]',
         'project': '.',
+        'deps': 'pull',
         'hooks-dir': '.github/ci',
         'test': True,
         'fmt': True,
@@ -166,7 +167,7 @@ class Subprojects(unittest.TestCase):
     def test_defaults(self):
         _, config = run('dev', subprojects='[{"path": "test/acme"}]')
         self.assertEqual(config['subprojects'], [{
-            'path': 'test/acme', 'pull': True, 'build': False, 'test': True,
+            'path': 'test/acme', 'deps': 'pull', 'build': False, 'test': True,
             'fmt': True, 'clean-dep': False, 'jobs': 0, 'legs': [], 'tier': 'light'}])
 
     def test_fmt_opt_out(self):
@@ -178,6 +179,10 @@ class Subprojects(unittest.TestCase):
             'unknown leg': '[{"path": "a", "legs": ["x86_64-linx"]}]',
             'unknown key': '[{"path": "a", "clean": true}]',
             'test without pull': '[{"path": "a", "pull": false}]',
+            'test without deps': '[{"path": "a", "deps": "none"}]',
+            'unknown deps mode': '[{"path": "a", "deps": "fetch"}]',
+            'pull and deps together': '[{"path": "a", "pull": true, "deps": "update"}]',
+            'string pull': '[{"path": "a", "pull": "no"}]',
             'bad tier': '[{"path": "a", "tier": "medium"}]',
             'string fmt': '[{"path": "a", "fmt": "no"}]',
             'recursive glob': '[{"path": "examples/**"}]',
@@ -195,6 +200,21 @@ class Subprojects(unittest.TestCase):
     def test_pull_only(self):
         _, config = run('dev', subprojects='[{"path": "a", "test": false}]')
         self.assertFalse(config['subprojects'][0]['test'])
+
+    def test_deps_update(self):
+        _, config = run('dev', subprojects='[{"path": "examples/*", "deps": "update", "build": true}]')
+        self.assertEqual(config['subprojects'][0]['deps'], 'update')
+
+    def test_pull_false_is_the_old_spelling_of_deps_none(self):
+        _, config = run('dev', subprojects='[{"path": "a", "pull": false, "test": false}]')
+        self.assertEqual(config['subprojects'][0]['deps'], 'none')
+
+    def test_root_deps(self):
+        self.assertEqual(run('dev')[1]['deps'], 'pull')
+        self.assertEqual(run('dev', deps='update')[1]['deps'], 'update')
+        for bad in ('none', 'fetch'):
+            with self.subTest(bad), self.assertRaises(plan.PlanError):
+                run('dev', deps=bad)
 
 
 class Hooks(unittest.TestCase):

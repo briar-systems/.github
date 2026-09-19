@@ -110,11 +110,12 @@ Every override is an input. There is nothing to fork.
 | `skip-legs` | none | JSON array of leg names to drop |
 | `light-legs` | none | JSON array of leg names to run in the light tier. Only the repos ruled above use it |
 | `project` | `.` | the project directory, for a repo whose real project is not the root |
+| `deps` | `pull` | how the project's dependencies are resolved: `pull` realizes committed pins, `update` resolves version ranges with `mach dep update --all` |
 | `profiles` | `["debug", "release"]` | profiles to build and test. Any name works, and each leg checks that the manifests it builds declare it |
 | `test` | `true` | run `mach test` on the project |
 | `fmt` | `true` | `mach fmt --check` of the project and every subproject, in the light tier, once, on the primary leg |
 | `all-targets` | `true` | release build of every manifest target, once, on the primary leg |
-| `subprojects` | none | JSON array of other projects to pull, build and test |
+| `subprojects` | none | JSON array of other projects to resolve, build and test |
 | `hooks-dir` | `.github/ci` | where the repo's hooks live |
 | `submodules` | `false` | the `actions/checkout` submodules mode |
 | `mach-version` | the family pin | a release tag, or `latest` |
@@ -143,11 +144,12 @@ A **subproject** is `{"path"}` plus these optional keys. The path may be a glob 
 
 | key | default | meaning |
 | --- | --- | --- |
-| `pull` | `true` | run `mach dep pull` on it |
+| `deps` | `pull` | `pull` runs `mach dep pull` on it, for a project that commits its pins. `update` runs `mach dep update --all`, for a consumer that declares deps by version range and has no pins, so each range resolves to the highest release it accepts. `none` leaves its deps alone, for an entry that neither builds nor tests |
+| `pull` | | the old spelling: `false` is `deps: none`. Do not give both |
 | `build` | `false` | build it in every profile |
 | `test` | `true` | test it in every profile |
 | `fmt` | `true` | include it in the fmt check, whatever its `legs` and `tier` |
-| `clean-dep` | `false` | delete its `dep/` before pulling, for a subproject that resolves the library as a non-root |
+| `clean-dep` | `false` | delete its `dep/` before resolving, for a subproject that resolves the library as a non-root |
 | `jobs` | mach default | passed as `--jobs` to its tests |
 | `legs` | every leg | the legs it runs on |
 | `tier` | `light` | `heavy` runs it only on legs running heavy |
@@ -156,7 +158,7 @@ A **subproject** is `{"path"}` plus these optional keys. The path may be a glob 
 
 **Hooks** are `setup.sh`, `verify.sh` and `teardown.sh` in `hooks-dir`, run with bash from the repo root:
 
-- `setup.sh` runs after the seed, before `dep pull`
+- `setup.sh` runs after the seed, before deps are resolved
 - `verify.sh` runs after the standard phases
 - `teardown.sh` runs whenever setup was attempted, even after a failure
 

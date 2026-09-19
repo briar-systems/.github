@@ -88,6 +88,31 @@ def sub(path, **keys):
     return dict({'path': path, 'build': True, 'test': False}, **keys)
 
 
+class Deps(unittest.TestCase):
+    def commands(self, config):
+        calls = []
+        real = run.mach
+        run.mach = lambda *args, cwd=None: calls.append(' '.join(args))
+        try:
+            run.deps(dict(leg(), **{'run-tier': 'light'}), config)
+        finally:
+            run.mach = real
+        return calls
+
+    def test_each_mode_runs_its_command(self):
+        config = {'project': '.', 'deps': 'pull', 'subprojects': [
+            {'path': 'pinned', 'deps': 'pull', 'clean-dep': False, 'legs': [], 'tier': 'light'},
+            {'path': 'examples/a', 'deps': 'update', 'clean-dep': False, 'legs': [], 'tier': 'light'},
+            {'path': 'docs', 'deps': 'none', 'clean-dep': False, 'legs': [], 'tier': 'light'},
+        ]}
+        self.assertEqual(self.commands(config), [
+            'dep pull .', 'dep pull pinned', 'dep update examples/a --all'])
+
+    def test_the_root_can_update(self):
+        config = {'project': 'app', 'deps': 'update', 'subprojects': []}
+        self.assertEqual(self.commands(config), ['dep update app --all'])
+
+
 class Expand(unittest.TestCase):
     def setUp(self):
         self.root = tempfile.TemporaryDirectory()
