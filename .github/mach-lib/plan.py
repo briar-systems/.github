@@ -102,13 +102,29 @@ def normalize_leg(entry, timeout):
     return leg
 
 
+DEPS_MODES = ('pull', 'update', 'none')
+
+
+def deps_mode(kind, name, value):
+    check_type(kind, 'deps', value, str)
+    if value not in DEPS_MODES:
+        raise PlanError(kind + ' ' + name + ' deps must be one of ' + ', '.join(DEPS_MODES))
+    return value
+
+
 def normalize_subproject(entry, legs):
     kind = 'subproject'
     check_keys(kind, entry, ('path',),
-               ('pull', 'build', 'test', 'fmt', 'clean-dep', 'jobs', 'legs', 'tier'))
+               ('deps', 'pull', 'build', 'test', 'fmt', 'clean-dep', 'jobs', 'legs', 'tier'))
+    # pull is the old spelling of deps: pull or none
+    if 'pull' in entry and 'deps' in entry:
+        raise PlanError('subproject ' + str(entry['path']) + ' gives both pull and deps; use deps')
+    if 'pull' in entry:
+        check_type(kind, 'pull', entry['pull'], bool)
+    deps = entry.get('deps', 'pull' if entry.get('pull', True) else 'none')
     sub = {
         'path': entry['path'],
-        'pull': entry.get('pull', True),
+        'deps': deps,
         'build': entry.get('build', False),
         'test': entry.get('test', True),
         'fmt': entry.get('fmt', True),
@@ -118,14 +134,15 @@ def normalize_subproject(entry, legs):
         'tier': entry.get('tier', 'light'),
     }
     check_type(kind, 'path', sub['path'], str)
-    for key in ('pull', 'build', 'test', 'fmt', 'clean-dep'):
+    deps_mode(kind, sub['path'], sub['deps'])
+    for key in ('build', 'test', 'fmt', 'clean-dep'):
         check_type(kind, key, sub[key], bool)
     check_type(kind, 'jobs', sub['jobs'], int)
     check_type(kind, 'tier', sub['tier'], str)
     if sub['tier'] not in TIERS:
         raise PlanError('subproject ' + sub['path'] + ' tier must be light or heavy')
-    if (sub['build'] or sub['test']) and not sub['pull']:
-        raise PlanError('subproject ' + sub['path'] + ' builds or tests without pulling its dependencies')
+    if (sub['build'] or sub['test']) and sub['deps'] == 'none':
+        raise PlanError('subproject ' + sub['path'] + ' builds or tests without resolving its dependencies')
     unknown = sorted(set(sub['legs']) - legs)
     if unknown:
         raise PlanError('subproject ' + sub['path'] + ' names unknown legs ' + ', '.join(unknown))
@@ -203,8 +220,13 @@ def plan(inputs, base_ref, root):
         leg['primary'] = leg['name'] == primary
         leg['run-tier'] = 'heavy' if full or leg['name'] in selection else 'light'
 
+    # the root always builds, so its deps are always resolved one way or the other
+    deps = deps_mode('project', inputs['project'], inputs['deps'])
+    if deps == 'none':
+        raise PlanError('project ' + inputs['project'] + ' builds, so deps must be pull or update')
     config = {
         'project': inputs['project'],
+        'deps': deps,
         'profiles': profiles,
         'test': inputs['test'],
         'fmt': inputs['fmt'],
@@ -235,6 +257,7 @@ def main():
         'profiles': env['PLAN_PROFILES'],
         'subprojects': env['PLAN_SUBPROJECTS'] or '[]',
         'project': env['PLAN_PROJECT'],
+        'deps': env['PLAN_DEPS'] or 'pull',
         'hooks-dir': env['PLAN_HOOKS_DIR'],
         'test': boolean(env['PLAN_TEST']),
         'fmt': boolean(env['PLAN_FMT']),

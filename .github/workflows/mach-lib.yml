@@ -33,6 +33,10 @@ on:
         description: directory of the project to build and test
         type: string
         default: .
+      deps:
+        description: how the project's dependencies are resolved, pull for committed pins or update for version ranges
+        type: string
+        default: pull
       profiles:
         description: JSON array of profiles to build and test
         type: string
@@ -106,6 +110,7 @@ jobs:
           PLAN_PROFILES: ${{ inputs.profiles }}
           PLAN_SUBPROJECTS: ${{ inputs.subprojects }}
           PLAN_PROJECT: ${{ inputs.project }}
+          PLAN_DEPS: ${{ inputs.deps }}
           PLAN_HOOKS_DIR: ${{ inputs.hooks-dir }}
           PLAN_TEST: ${{ inputs.test }}
           PLAN_FMT: ${{ inputs.fmt }}
