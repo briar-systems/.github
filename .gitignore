@@ -9,3 +9,5 @@ test/fixture/consumer/dep/
 test/fixture/examples/*/out/
 test/fixture/examples/*/dep/
 __pycache__/
+test/fixture/dit/out/
+test/fixture/dit/dep/

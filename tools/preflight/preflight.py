@@ -78,6 +78,7 @@ def lib_inputs(workflow_text, plan):
         'subprojects': get('subprojects', '') or '[]',
         'project': get('project', '.'),
         'deps': get('deps', 'pull'),
+        'dit': get('dit', 'none'),
         'hooks-dir': get('hooks-dir', '.github/ci'),
         'test': flag('test'),
         'fmt': flag('fmt'),
@@ -255,7 +256,7 @@ def sample(toolkit, compiler, name, root, inputs, work, env_path):
 
     script = [sys.executable, str(toolkit.run_py)]
     hooks, hooks_dir = plan_config['hooks'], plan_config['hooks-dir']
-    ok = step('env', script + ['env']) and step('manifests', script + ['manifests'])
+    ok = step('env', script + ['env']) and step('manifests', script + ['manifests']) and step('dit', script + ['dit'])
     setup = ok and 'setup.sh' in hooks
     if setup:
         ok = step('setup hook', ['bash', hooks_dir + '/setup.sh'])

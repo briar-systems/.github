@@ -76,12 +76,16 @@ jobs:
       hooks-dir: test/fixture/ci
       profiles: '["debug", "release", "fast"]'
       light-legs: '["aarch64-linux"]'
+      # test/fixture/dit links a secret multiply, so its test refuses to start on
+      # an aarch64 runner without FEAT_DIT unless the toolkit emulates the mode
+      dit: required
       extra-legs: >-
         [{"name": "riscv64-linux", "runs-on": "ubuntu-latest", "tier": "heavy",
           "target": "linux-riscv64", "runner": "qemu-riscv64", "test-args": ["--jobs", "1"],
           "apt": ["qemu-user"]}]
       subprojects: >-
         [{"path": "test/fixture/consumer", "clean-dep": true},
+         {"path": "test/fixture/dit", "legs": ["x86_64-linux", "aarch64-linux", "aarch64-darwin"]},
          {"path": "test/fixture/examples/*", "build": true, "test": false}]
       evidence: test/fixture/out/
 

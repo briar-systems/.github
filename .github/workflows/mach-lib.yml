@@ -37,6 +37,10 @@ on:
         description: how the project's dependencies are resolved, pull for committed pins or update for version ranges
         type: string
         default: pull
+      dit:
+        description: what the project's tests need of the processor, none or required; required runs aarch64 tests under qemu-aarch64 -cpu max on a runner without FEAT_DIT
+        type: string
+        default: none
       profiles:
         description: JSON array of profiles to build and test
         type: string
@@ -111,6 +115,7 @@ jobs:
           PLAN_SUBPROJECTS: ${{ inputs.subprojects }}
           PLAN_PROJECT: ${{ inputs.project }}
           PLAN_DEPS: ${{ inputs.deps }}
+          PLAN_DIT: ${{ inputs.dit }}
           PLAN_HOOKS_DIR: ${{ inputs.hooks-dir }}
           PLAN_TEST: ${{ inputs.test }}
           PLAN_FMT: ${{ inputs.fmt }}
@@ -171,6 +176,10 @@ jobs:
           python "$MACH_LIB_RUN" env
       - name: manifests
         run: python "$MACH_LIB_RUN" manifests
+      # decides whether this processor runs the tests itself or qemu models the
+      # mode they need, and says which in the log
+      - name: dit
+        run: python "$MACH_LIB_RUN" dit
       - name: setup hook
         id: setup
         if: contains(fromJSON(needs.plan.outputs.config).hooks, 'setup.sh')

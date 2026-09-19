@@ -15,4 +15,12 @@ done
 if [ "$MACH_CI_PRIMARY" = true ]; then
   [ -d "$MACH_CI_PROJECT/out/windows-x86_64/release" ] || { echo "::error::the primary leg did not build every target"; exit 1; }
 fi
-echo "leg $MACH_CI_LEG ran $MACH_CI_TIER"
+# the dit step picked a path that matches what the OS reports
+case "$MACH_CI_LEG" in
+  aarch64-linux)
+    grep -qw dit /proc/cpuinfo && want=native || want=emulated
+    [ "$MACH_CI_DIT" = "$want" ] || { echo "::error::leg $MACH_CI_LEG ran its tests $MACH_CI_DIT, the processor wants $want"; exit 1; } ;;
+  riscv64-linux) [ "$MACH_CI_DIT" = runner ] || { echo "::error::a leg with its own runner reported dit $MACH_CI_DIT"; exit 1; } ;;
+  *) [ "$MACH_CI_DIT" = native ] || { echo "::error::leg $MACH_CI_LEG reported dit $MACH_CI_DIT"; exit 1; } ;;
+esac
+echo "leg $MACH_CI_LEG ran $MACH_CI_TIER, dit $MACH_CI_DIT"
