@@ -114,6 +114,7 @@ Every override is an input. There is nothing to fork.
 | `dit` | `none` | `required` when the project's binaries need the aarch64 data-independent-timing mode, see [DIT](#dit) |
 | `profiles` | `["debug", "release"]` | profiles to build and test. Any name works, and each leg checks that the manifests it builds declare it |
 | `test` | `true` | run `mach test` on the project |
+| `test-selections` | none | JSON array of extra `mach test` argument lists, such as `[["--lib", "tests"]]` for a library that keeps its test-only modules in a test artifact. In every profile, after the default `mach test <project>`, each entry runs as `mach test <project> <entry...>` with the leg's `--target`, `--runner` (the DIT qemu wrapper included) and `test-args`. Legs and repos that do not test skip it. A failing entry fails the leg, and its error names the entry and the profile. The plan refuses an empty entry, a duplicate, and `--profile`, `--target` or `--runner`, which the leg sets |
 | `fmt` | `true` | `mach fmt --check` of the project and every subproject, in the light tier, once, on the primary leg |
 | `all-targets` | `true` | release build of every manifest target, once, on the primary leg |
 | `subprojects` | none | JSON array of other projects to resolve, build and test |

@@ -82,6 +82,7 @@ def lib_inputs(workflow_text, plan):
         'submodules': str(get('submodules', 'false')),
         'hooks-dir': get('hooks-dir', '.github/ci'),
         'test': flag('test'),
+        'test-selections': get('test-selections', '') or '[]',
         'fmt': flag('fmt'),
         'all-targets': flag('all-targets'),
         'timeout-minutes': int(get('timeout-minutes', 40)),

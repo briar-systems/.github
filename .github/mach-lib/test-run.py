@@ -115,6 +115,65 @@ class Deps(unittest.TestCase):
         self.assertEqual(self.commands(config), ['dep update app --all'])
 
 
+class Test(unittest.TestCase):
+    config = {'project': '.', 'test': True, 'profiles': ['debug', 'release'], 'test-selections': []}
+
+    def commands(self, config, fail=None, **keys):
+        calls = []
+
+        def mach(*args, cwd=None):
+            calls.append(' '.join(args))
+            if fail and fail in ' '.join(args):
+                raise run.subprocess.CalledProcessError(1, ['mach', *args])
+
+        real = run.mach
+        run.mach = mach
+        try:
+            run.test(dict(leg(**{k: v for k, v in keys.items() if k != 'runner'}),
+                          runner=keys.get('runner', ''), **{'test-args': ['--jobs', '1']}), config)
+        finally:
+            run.mach = real
+        return calls
+
+    def test_no_selections_runs_the_default_alone(self):
+        self.assertEqual(self.commands(self.config), [
+            'test . --profile debug --jobs 1', 'test . --profile release --jobs 1'])
+
+    def test_each_selection_follows_the_default_in_every_profile(self):
+        config = dict(self.config, **{'test-selections': [['--lib', 'tests'], ['--bin', 'tool']]})
+        self.assertEqual(self.commands(config), [
+            'test . --profile debug --jobs 1',
+            'test . --lib tests --profile debug --jobs 1',
+            'test . --bin tool --profile debug --jobs 1',
+            'test . --profile release --jobs 1',
+            'test . --lib tests --profile release --jobs 1',
+            'test . --bin tool --profile release --jobs 1'])
+
+    def test_a_selection_carries_the_target_and_runner(self):
+        config = dict(self.config, profiles=['debug'], **{'test-selections': [['--lib', 'tests']]})
+        self.assertEqual(self.commands(config, target='linux-arm64', runner='/tmp/qemu-aarch64-dit'), [
+            'test . --profile debug --target linux-arm64 --runner /tmp/qemu-aarch64-dit --jobs 1',
+            'test . --lib tests --profile debug --target linux-arm64 --runner /tmp/qemu-aarch64-dit --jobs 1'])
+
+    def test_a_leg_or_repo_without_tests_runs_no_selection(self):
+        config = dict(self.config, **{'test-selections': [['--lib', 'tests']]})
+        self.assertEqual(self.commands(config, test=False), [])
+        self.assertEqual(self.commands(dict(config, test=False)), [])
+
+    def test_a_failing_selection_names_itself(self):
+        config = dict(self.config, **{'test-selections': [['--lib', 'tests']]})
+        with self.assertRaises(run.SelectionError) as raised:
+            self.commands(config, fail='--lib tests --profile release')
+        self.assertEqual(str(raised.exception),
+                         'test selection --lib tests failed in profile release: '
+                         'test . --lib tests --profile release --jobs 1 exited 1')
+
+    def test_a_failing_default_run_stops_before_the_selections(self):
+        config = dict(self.config, **{'test-selections': [['--lib', 'tests']]})
+        with self.assertRaises(run.subprocess.CalledProcessError):
+            self.commands(config, fail='test . --profile debug')
+
+
 class Expand(unittest.TestCase):
     def setUp(self):
         self.root = tempfile.TemporaryDirectory()

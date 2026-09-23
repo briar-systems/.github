@@ -57,6 +57,13 @@ class LibInputs(unittest.TestCase):
         matrix, config = plan.plan(inputs, 'main', '/nonexistent')
         self.assertNotIn('x86_64-windows', [e['leg']['name'] for e in matrix['include']])
         self.assertEqual(config['subprojects'][0]['path'], 'test/acme')
+        self.assertEqual(config['test-selections'], [])
+
+    def test_test_selections_are_read(self):
+        workflow = WORKFLOW.replace('      fmt: false\n', '      fmt: false\n      test-selections: \'[["--lib", "tests"]]\'\n')
+        inputs, _ = preflight.lib_inputs(workflow, plan)
+        _, config = plan.plan(inputs, 'main', '/nonexistent')
+        self.assertEqual(config['test-selections'], [['--lib', 'tests']])
 
     def test_a_workflow_without_one_lib_job_is_refused(self):
         with self.assertRaises(ValueError):
