@@ -24,6 +24,7 @@ def inputs(**overrides):
         'submodules': 'false',
         'hooks-dir': '.github/ci',
         'test': True,
+        'test-selections': '[]',
         'fmt': True,
         'all-targets': True,
         'timeout-minutes': 40,
@@ -244,6 +245,31 @@ class Subprojects(unittest.TestCase):
         for bad in ('none', 'fetch'):
             with self.subTest(bad), self.assertRaises(plan.PlanError):
                 run('dev', deps=bad)
+
+
+class TestSelections(unittest.TestCase):
+    def test_defaults_to_none(self):
+        self.assertEqual(run('dev')[1]['test-selections'], [])
+
+    def test_selections_pass_in_order(self):
+        _, config = run('dev', **{'test-selections': '[["--lib", "tests"], ["--bin", "tool", "--jobs", "1"]]'})
+        self.assertEqual(config['test-selections'], [['--lib', 'tests'], ['--bin', 'tool', '--jobs', '1']])
+
+    def test_refusals(self):
+        cases = {
+            'not json': '[[--lib]]',
+            'not array': '{"lib": "tests"}',
+            'string selection': '["--lib tests"]',
+            'non-string argument': '[["--jobs", 1]]',
+            'empty selection': '[[]]',
+            'duplicate': '[["--lib", "tests"], ["--lib", "tests"]]',
+            'profile': '[["--lib", "tests", "--profile", "fast"]]',
+            'target': '[["--target", "windows"]]',
+            'runner': '[["--runner=qemu-riscv64"]]',
+        }
+        for label, value in cases.items():
+            with self.subTest(label), self.assertRaises(plan.PlanError):
+                run('dev', **{'test-selections': value})
 
 
 class Hooks(unittest.TestCase):

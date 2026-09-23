@@ -158,6 +158,22 @@ def normalize_subproject(entry, legs):
     return sub
 
 
+# the options each leg sets on every test run; a selection that named one would
+# test something other than what the leg claims
+LEG_TEST_OPTIONS = ('--profile', '--target', '--runner')
+
+
+def normalize_test_selection(entry):
+    selection = string_list('input', 'test-selections', entry)
+    if not selection:
+        raise PlanError('test-selections holds an empty selection, which would repeat the default run')
+    for arg in selection:
+        if arg.split('=', 1)[0] in LEG_TEST_OPTIONS:
+            raise PlanError('test selection ' + json.dumps(selection) + ' sets ' + arg.split('=', 1)[0]
+                            + ', which the toolkit sets per leg and profile')
+    return selection
+
+
 def check_hooks(root, hooks_dir):
     directory = Path(root) / hooks_dir
     if not directory.is_dir():
@@ -199,6 +215,11 @@ def plan(inputs, base_ref, root):
             raise PlanError('profile name ' + json.dumps(profile) + ' must be lowercase letters, digits, underscores and dashes')
     subprojects = [normalize_subproject(entry, set(names))
                    for entry in parse_list(inputs['subprojects'], 'subprojects')]
+    selections = [normalize_test_selection(entry)
+                  for entry in parse_list(inputs['test-selections'], 'test-selections')]
+    duplicates = sorted({json.dumps(entry) for entry in selections if selections.count(entry) > 1})
+    if duplicates:
+        raise PlanError('duplicate test selections ' + ', '.join(duplicates))
     paths = [sub['path'] for sub in subprojects]
     duplicates = sorted({path for path in paths if paths.count(path) > 1})
     if duplicates:
@@ -242,6 +263,7 @@ def plan(inputs, base_ref, root):
         'submodules': inputs['submodules'],
         'profiles': profiles,
         'test': inputs['test'],
+        'test-selections': selections,
         'fmt': inputs['fmt'],
         'all-targets': inputs['all-targets'],
         'subprojects': subprojects,
@@ -275,6 +297,7 @@ def main():
         'submodules': env['PLAN_SUBMODULES'] or 'false',
         'hooks-dir': env['PLAN_HOOKS_DIR'],
         'test': boolean(env['PLAN_TEST']),
+        'test-selections': env['PLAN_TEST_SELECTIONS'] or '[]',
         'fmt': boolean(env['PLAN_FMT']),
         'all-targets': boolean(env['PLAN_ALL_TARGETS']),
         'timeout-minutes': int(env['PLAN_TIMEOUT']),

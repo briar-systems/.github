@@ -110,6 +110,10 @@ def expand_subprojects(subprojects, root='.'):
     return expanded
 
 
+class SelectionError(RuntimeError):
+    pass
+
+
 def skip(reason):
     print('skipped: ' + reason)
 
@@ -279,6 +283,12 @@ def test(leg, config):
         return skip('test is off for leg ' + leg['name'])
     for profile in config['profiles']:
         mach('test', config['project'], '--profile', profile, *leg_args(leg, 'test'))
+        for selection in config['test-selections']:
+            try:
+                mach('test', config['project'], *selection, '--profile', profile, *leg_args(leg, 'test'))
+            except subprocess.CalledProcessError as error:
+                raise SelectionError('test selection ' + ' '.join(selection) + ' failed in profile ' + profile
+                                     + ': ' + ' '.join(error.cmd[1:]) + ' exited ' + str(error.returncode))
 
 
 def subprojects(leg, config):
@@ -346,7 +356,7 @@ def main():
     try:
         config['subprojects'] = expand_subprojects(config['subprojects'])
         PHASES[sys.argv[1]](leg, config)
-    except (ExpandError, DitError) as error:
+    except (ExpandError, DitError, SelectionError) as error:
         print('::error::' + str(error))
         sys.exit(1)
     except subprocess.CalledProcessError as error:
