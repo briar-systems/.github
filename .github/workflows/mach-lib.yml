@@ -49,6 +49,10 @@ on:
         description: run mach test on the project
         type: boolean
         default: true
+      test-selections:
+        description: JSON array of extra mach test argument lists, each run on the project in every profile after the default run, such as [["--lib", "tests"]]
+        type: string
+        default: ""
       fmt:
         description: run mach fmt --check once, on the primary leg
         type: boolean
@@ -119,6 +123,7 @@ jobs:
           PLAN_SUBMODULES: ${{ inputs.submodules }}
           PLAN_HOOKS_DIR: ${{ inputs.hooks-dir }}
           PLAN_TEST: ${{ inputs.test }}
+          PLAN_TEST_SELECTIONS: ${{ inputs.test-selections }}
           PLAN_FMT: ${{ inputs.fmt }}
           PLAN_ALL_TARGETS: ${{ inputs.all-targets }}
           PLAN_TIMEOUT: ${{ inputs.timeout-minutes }}
