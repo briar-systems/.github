@@ -239,6 +239,65 @@ def git(*args, cwd=None):
     return subprocess.run(['git', *args], check=True, cwd=cwd, capture_output=True, text=True).stdout
 
 
+# the git config a leg includes while it holds an app token. only the owner's
+# repositories get the token, and git sends it only when the server asks, so a
+# public repository is still read anonymously
+def private_rewrites(owner, token):
+    authed = 'https://x-access-token:' + token + '@github.com/' + owner + '/'
+    lines = ['[url "' + authed + '"]']
+    lines += ['\tinsteadOf = ' + prefix + owner + '/'
+              for prefix in ('https://github.com/', 'git@github.com:', 'ssh://git@github.com/')]
+    return '\n'.join(lines) + '\n'
+
+
+def private_config():
+    return Path(os.environ['RUNNER_TEMP']) / 'mach-lib-private.gitconfig'
+
+
+def private_reads(leg, config):
+    token = os.environ.get('MACH_LIB_APP_TOKEN', '')
+    if not token:
+        if os.environ.get('MACH_LIB_APP_ID'):
+            print('::notice::BRIAR_CI_APP_ID is set but the caller passes no BRIAR_CI_APP_KEY; '
+                  'a caller that needs private repositories passes secrets: inherit')
+        return skip('no app token, so only public repositories are readable')
+    owner = os.environ['MACH_LIB_OWNER']
+    path = private_config()
+    # written directly so the token never reaches a command line. it lives only
+    # in the runner's temp directory, which the runner wipes after the job
+    with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), 'w') as handle:
+        handle.write(private_rewrites(owner, token))
+    git('config', '--global', '--add', 'include.path', path.as_posix())
+    print('git reads github.com/' + owner + '/ with the app token for the rest of the job')
+
+
+def private_reads_cleanup(leg, config):
+    path = private_config()
+    if not path.exists():
+        return skip('no app token was configured')
+    subprocess.run(['git', 'config', '--global', '--fixed-value', '--unset-all', 'include.path', path.as_posix()],
+                   check=False)
+    path.unlink()
+    print('removed the app token from the git config')
+
+
+# what actions/checkout does with its own token, which reads only the caller's
+# repository. any ssh url is read over https, as checkout reads it
+SSH_TO_HTTPS = ['-c', 'url.https://github.com/.insteadOf=git@github.com:']
+
+
+def submodules(leg, config):
+    if config['submodules'] == 'false':
+        return skip('the checkout has no submodules')
+    recursive = ['--recursive'] if config['submodules'] == 'recursive' else []
+    subprocess.run(['git', 'submodule', 'sync', *recursive], check=True)
+    subprocess.run(['git', *SSH_TO_HTTPS, '-c', 'protocol.version=2', 'submodule', 'update', '--init', '--force',
+                    '--depth=1', *recursive], check=True)
+    # checkout persists the rewrite in each submodule, so later fetches there read over https too
+    subprocess.run(['git', 'submodule', 'foreach', *recursive,
+                    'git config --local url.https://github.com/.insteadOf git@github.com:'], check=True)
+
+
 def submodule_tags(leg, config):
     # a shallow checkout carries no tags, and a dependency selected by version
     # verifies against the release tag on its pinned commit, read from the
@@ -335,6 +394,9 @@ def all_targets(leg, config):
 
 
 PHASES = {
+    'private-reads': private_reads,
+    'private-reads-cleanup': private_reads_cleanup,
+    'submodules': submodules,
     'submodule-tags': submodule_tags,
     'env': export_env,
     'manifests': check_manifests,
@@ -347,6 +409,8 @@ PHASES = {
     'all-targets': all_targets,
 }
 
+CHECKOUT_PHASES = ('private-reads', 'private-reads-cleanup', 'submodules')
+
 
 def main():
     leg = json.loads(os.environ['MACH_LIB_LEG'])
@@ -354,7 +418,9 @@ def main():
     # the dit phase exports a runner when this processor lacks a mode the tests need
     leg['runner'] = leg['runner'] or os.environ.get('MACH_LIB_DIT_RUNNER', '')
     try:
-        config['subprojects'] = expand_subprojects(config['subprojects'])
+        # the phases before the submodules are fetched cannot expand a glob into them
+        if sys.argv[1] not in CHECKOUT_PHASES:
+            config['subprojects'] = expand_subprojects(config['subprojects'])
         PHASES[sys.argv[1]](leg, config)
     except (ExpandError, DitError, SelectionError) as error:
         print('::error::' + str(error))
