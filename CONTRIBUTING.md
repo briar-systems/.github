@@ -39,7 +39,15 @@ Issues follow an orthogonal, faceted tagging system across five sets:
 - Severity and state: `critical`, `blocked`, `security`
 - Discussion: `discussion` (design proposals, RFCs, and open debates)
 
-Tags mix and match across sets (for example, `patch`, `fix`, `tooling`). When filing an issue, select the applicable tags in the sidebar. Milestones are not used for tracking in-flight work.
+Tags mix and match across sets (for example, `patch`, `fix`, `tooling`). When filing an issue, select the applicable tags in the sidebar.
+
+## Milestones
+Milestones record status, in every repository:
+- `active`: the current slice, in flight or queued next
+- `deferred`: planned for after the current slice
+- `parked`: deliberately set aside until something changes
+
+No milestone is backlog. An issue picked up moves to `active`, and a new slice re-sorts the rest. `blocked` is a label for a state, not a milestone, and SemVer comes from labels, never milestones.
 
 ## Versioning
 Repositories strictly follow [semantic versioning](https://semver.org/) (`vMAJOR.MINOR.PATCH`):
