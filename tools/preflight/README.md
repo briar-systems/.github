@@ -4,7 +4,7 @@ Every caller uses the toolkit at `@main`, so a bad merge to `main` breaks CI acr
 
 ```sh
 python3 tools/preflight/preflight.py --toolkit origin/dev            # the pin on dev
-python3 tools/preflight/preflight.py --toolkit origin/dev --mach v5.2.1
+python3 tools/preflight/preflight.py --toolkit origin/dev --mach v6.3.0
 ```
 
 It needs `gh` (authenticated), `git`, and Python 3.11 or newer with PyYAML.
