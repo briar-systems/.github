@@ -188,7 +188,7 @@ def clone(org, name, branch, submodules, destination):
     if destination.exists():
         remove_tree(destination)
     sh('git', 'clone', '-q', '--depth', '1', '-b', branch, 'https://github.com/' + org + '/' + name, str(destination))
-    # match actions/checkout: no submodules unless the caller asks, and recursion only when it says so
+    # match the leg's submodules phase: no submodules unless the caller asks, and recursion only when it says so
     if submodules in ('true', 'recursive'):
         sh('git', 'submodule', 'update', '-q', '--init', '--depth', '1',
            *(['--recursive'] if submodules == 'recursive' else []), cwd=destination)

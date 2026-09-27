@@ -3,7 +3,7 @@
 use fixture.lib.add;
 use std.runtime;
 
-test "consumer: fixture resolves through its path dependency" {
+test add__resolves_through_path_dependency {
     if (add(40, 2) != 42) {
         ret 1;
     }

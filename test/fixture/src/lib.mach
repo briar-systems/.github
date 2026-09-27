@@ -7,7 +7,7 @@ pub fun add(a: i64, b: i64) i64 {
     ret a + b;
 }
 
-test "fixture.add: basic sum" {
+test add__basic_sum {
     if (add(2, 3) != 5) {
         ret 1;
     }

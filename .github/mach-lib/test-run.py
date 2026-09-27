@@ -311,5 +311,56 @@ class SubmoduleTags(unittest.TestCase):
         self.assertEqual(run.parse_submodule_status(''), [])
 
 
+class PrivateReads(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        root = Path(self.dir.name)
+        (root / 'temp').mkdir()
+        env = {'RUNNER_TEMP': str(root / 'temp'), 'GIT_CONFIG_GLOBAL': str(root / 'gitconfig'),
+               'GIT_CONFIG_NOSYSTEM': '1', 'MACH_LIB_OWNER': 'briar-systems'}
+        patcher = unittest.mock.patch.dict(os.environ, env)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def url(self, url):
+        return run.git('ls-remote', '--get-url', url).strip()
+
+    def test_the_owner_reads_with_the_token_over_every_scheme(self):
+        with unittest.mock.patch.dict(os.environ, {'MACH_LIB_APP_TOKEN': 'ghs_secret'}):
+            run.private_reads({}, {})
+        authed = 'https://x-access-token:ghs_secret@github.com/briar-systems/bsds.git'
+        self.assertEqual(self.url('git@github.com:briar-systems/bsds.git'), authed)
+        self.assertEqual(self.url('https://github.com/briar-systems/bsds.git'), authed)
+        self.assertEqual(self.url('ssh://git@github.com/briar-systems/bsds.git'), authed)
+
+    def test_other_owners_never_see_the_token(self):
+        with unittest.mock.patch.dict(os.environ, {'MACH_LIB_APP_TOKEN': 'ghs_secret'}):
+            run.private_reads({}, {})
+        self.assertEqual(self.url('https://github.com/octocat/x'), 'https://github.com/octocat/x')
+        self.assertEqual(self.url('https://github.com/briar-systems-other/x'), 'https://github.com/briar-systems-other/x')
+
+    def test_the_token_file_is_private_to_the_runner_user(self):
+        with unittest.mock.patch.dict(os.environ, {'MACH_LIB_APP_TOKEN': 'ghs_secret'}):
+            run.private_reads({}, {})
+        if os.name == 'posix':
+            self.assertEqual(run.private_config().stat().st_mode & 0o777, 0o600)
+
+    def test_cleanup_leaves_no_token_behind(self):
+        with unittest.mock.patch.dict(os.environ, {'MACH_LIB_APP_TOKEN': 'ghs_secret'}):
+            run.private_reads({}, {})
+        run.private_reads_cleanup({}, {})
+        self.assertFalse(run.private_config().exists())
+        self.assertNotIn('mach-lib-private', Path(os.environ['GIT_CONFIG_GLOBAL']).read_text())
+        self.assertEqual(self.url('git@github.com:briar-systems/bsds.git'), 'git@github.com:briar-systems/bsds.git')
+
+    def test_without_a_token_nothing_changes(self):
+        with unittest.mock.patch.dict(os.environ, {'MACH_LIB_APP_TOKEN': ''}):
+            run.private_reads({}, {})
+        self.assertFalse(run.private_config().exists())
+        self.assertFalse(Path(os.environ['GIT_CONFIG_GLOBAL']).exists())
+        run.private_reads_cleanup({}, {})
+
+
 if __name__ == '__main__':
     unittest.main()

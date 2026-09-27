@@ -11,7 +11,7 @@ pub fun multiply(a: ^u64, b: ^u64) ^u64 {
     ret a * b;
 }
 
-test "ditfixture.multiply: the secret product is the product" {
+test multiply__secret_product {
     val six:   u64  = 6;
     val seven: u64  = 7;
     val x:     ^u64 = six;

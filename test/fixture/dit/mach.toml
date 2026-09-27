@@ -1,7 +1,7 @@
 [project]
 id      = "ditfixture"
 version = "0.1.0"
-mach    = "^5.8"
+mach    = "^6"
 src     = "src"
 out     = "out/{target.name}/{profile.name}"
 
@@ -50,8 +50,8 @@ targets = ["*"]
 link    = []
 need    = []
 
-# std 5.8.0 is the first whose start turns PSTATE.DIT on for a link that
-# admits a secret multiply, and refuses on a processor without the mode
+# std turns PSTATE.DIT on at start for a link that admits a secret multiply,
+# and refuses on a processor without the mode
 [dep.std]
 git = "https://github.com/briar-systems/mach-std"
-ref = "tag/v5.8.0"
+ref = "tag/v9.0.0"

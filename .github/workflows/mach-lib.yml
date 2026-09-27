@@ -70,7 +70,7 @@ on:
         type: string
         default: .github/ci
       submodules:
-        description: actions/checkout submodules mode for the repo
+        description: submodules mode for the repo, false, true or recursive as actions/checkout reads it; the leg fetches them after the app token step
         type: string
         default: "false"
       mach-version:
@@ -85,6 +85,10 @@ on:
         description: default leg timeout
         type: number
         default: 40
+    secrets:
+      BRIAR_CI_APP_KEY:
+        description: the org CI app's private key; a caller passing it with secrets inherit reads the owner's private repositories through the app
+        required: false
 
 permissions:
   contents: read
@@ -142,13 +146,14 @@ jobs:
       MACH_LIB_CONFIG: ${{ needs.plan.outputs.config }}
       MACH_LIB_RUN: .mach-lib/.github/mach-lib/run.py
       MACH_LIB_HOOKS_DIR: ${{ inputs.hooks-dir }}
+      MACH_LIB_HAS_APP_KEY: ${{ secrets.BRIAR_CI_APP_KEY != '' }}
     defaults:
       run:
         shell: bash
     steps:
+      # the submodules step fetches submodules itself: checkout's own token reads
+      # only this repository, and a private submodule needs the app token
       - uses: actions/checkout@v6
-        with:
-          submodules: ${{ inputs.submodules }}
       # the toolkit is checked out at this workflow's own commit, so a caller
       # pinned to a ref runs the actions and scripts from that same ref
       - uses: actions/checkout@v6
@@ -159,6 +164,27 @@ jobs:
           sparse-checkout: |
             .github/actions
             .github/mach-lib
+      # a caller with the org CI app and its key reads the owner's private
+      # repositories for this job through a short-lived installation token, which
+      # the action masks and revokes when the job ends. without them this is skipped
+      - name: app token
+        id: app
+        if: vars.BRIAR_CI_APP_ID != '' && env.MACH_LIB_HAS_APP_KEY == 'true'
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.BRIAR_CI_APP_ID }}
+          private-key: ${{ secrets.BRIAR_CI_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          permission-contents: read
+      - name: private reads
+        env:
+          MACH_LIB_APP_ID: ${{ vars.BRIAR_CI_APP_ID }}
+          MACH_LIB_APP_TOKEN: ${{ steps.app.outputs.token }}
+          MACH_LIB_OWNER: ${{ github.repository_owner }}
+        run: python "$MACH_LIB_RUN" private-reads
+      - name: submodules
+        if: inputs.submodules != 'false'
+        run: python "$MACH_LIB_RUN" submodules
       # a shallow submodule carries no tags, and a dependency selected by version
       # verifies against the release tag on its pinned commit
       - name: submodule tags
@@ -214,6 +240,9 @@ jobs:
       - name: teardown hook
         if: always() && steps.setup.conclusion != 'skipped' && contains(fromJSON(needs.plan.outputs.config).hooks, 'teardown.sh')
         run: bash "$MACH_LIB_HOOKS_DIR/teardown.sh"
+      - name: private reads cleanup
+        if: always()
+        run: python "$MACH_LIB_RUN" private-reads-cleanup
       - name: evidence
         if: always() && inputs.evidence != ''
         uses: actions/upload-artifact@v7

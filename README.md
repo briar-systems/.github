@@ -98,6 +98,32 @@ A pull request into `main` adds native `aarch64-linux`, `x86_64-windows`, `aarch
 - the `gate` job runs on `ubuntu-latest`, or on another runner where `python` can import PyYAML
 - the leg job checks the toolkit out to `.mach-lib/` inside the workspace. The seed goes under `$RUNNER_TEMP` and never lands in the workspace
 
+### Private dependencies
+
+A repo whose submodules or mach dependencies are private reads them through the org's CI app, `briar-systems-ci`, with Contents read-only. The org variable `BRIAR_CI_APP_ID` holds its id and the org secret `BRIAR_CI_APP_KEY` its private key, and both are visible to private repos only. A repository becomes readable by being added to the app's installation. No per-repo deploy key is involved.
+
+The caller passes the key down, since a called workflow sees no secret the caller does not hand it:
+
+```yaml
+jobs:
+  lib:
+    uses: briar-systems/.github/.github/workflows/mach-lib.yml@main
+    secrets: inherit
+    with:
+      submodules: "true"
+```
+
+A `cd.yml` passes `secrets: inherit` on its `ci` job as well, so the release's full CI reads the same repositories.
+
+Each leg then runs these steps after the repo and toolkit checkouts and before any submodule or dependency is fetched:
+
+1. `app token` mints an installation token with `actions/create-github-app-token`, for the repo's owner and `contents: read` only. It lives for this job: the action masks it in the log and revokes it when the job ends
+2. `private reads` writes a git config under `$RUNNER_TEMP` that rewrites `https://github.com/<owner>/`, `git@github.com:<owner>/` and `ssh://git@github.com/<owner>/` to token-authenticated https, and includes it from the global git config. The token never reaches a command line or the workspace. Git sends it only when a server asks, so a public repository is still read anonymously, and no other owner ever sees it
+3. `submodules` fetches the submodules in the caller's `submodules` mode, reading any other `git@github.com:` url over https as `actions/checkout` would
+4. `private reads cleanup` removes the include and the file whatever the outcome
+
+Without `BRIAR_CI_APP_ID`, as in a public or external repo, or without the key, `app token` is skipped and `private reads` changes nothing, so the leg reads public repositories only. When the variable is set but the caller passes no key, `private reads` says so in a notice.
+
 ### Override surface
 
 Every override is an input. There is nothing to fork.
@@ -119,7 +145,7 @@ Every override is an input. There is nothing to fork.
 | `all-targets` | `true` | release build of every manifest target, once, on the primary leg |
 | `subprojects` | none | JSON array of other projects to resolve, build and test |
 | `hooks-dir` | `.github/ci` | where the repo's hooks live |
-| `submodules` | `false` | the `actions/checkout` submodules mode. With `true` or `recursive`, the leg fetches each submodule's release tag before anything else, see below |
+| `submodules` | `false` | `false`, `true` or `recursive`, as `actions/checkout` reads it. With `true` or `recursive`, the leg fetches the submodules with the app token when it has one, see [Private dependencies](#private-dependencies), then each submodule's release tag before anything else, see below |
 | `mach-version` | the family pin | a release tag, or `latest` |
 | `evidence` | none | paths uploaded as `evidence-<leg>` whatever the outcome |
 | `timeout-minutes` | `40` | default leg timeout |
@@ -402,8 +428,6 @@ esac
 
 Callers reference the workflow and the gate and seed actions at `@main`. A toolkit change lands on `dev` first, and this repo's `dev` to `main` pull request, which runs every leg, is its release gate. The workflow checks out its actions and scripts at its own commit, so one caller ref pins all of them together. The mach seed pin is `.github/actions/seed-mach/version`. Bumping it is one pull request here, and it moves every caller that has not set `mach-version`.
 
-Every family manifest declares the compiler it needs as `mach = "^5.3"` under `[project]`. The key only exists from mach 5.3 on, and older compilers refuse it (`unknown key 'mach' in [project]`), so having the key already sets a 5.3 floor. Once any adopter declares it, the pin cannot go below v5.3.0, and a caller that sets `mach-version` must name v5.3.0 or later. Until a repo declares the key, 5.3 warns on every build that a later release will require it. Each repo adds the key at its next natural touch, a pull request or release it is already making, rather than in a dedicated pass.
-
-The value stays `^5.3` even when a steward builds with a newer compiler. A repo that uses a feature newer than 5.3, such as vector registers in inline `asm` (5.4), declares that release as its own floor, for example `mach = "^5.4"`. The seed has to reach that release before the repo's CI can pass.
+Every root manifest states the compiler range it needs as `mach` under `[project]`, and mach 6 refuses a root manifest without it. The family is on mach 6, declared as `mach = "^6"`, or as the minor release a repo first needs, such as `mach = "^6.3"`. The pin has to satisfy every adopter's range, so it moves only to a release every adopter accepts, and a caller that sets `mach-version` must name a release inside its own range. A repo that raises its floor past the pin cannot pass CI until the seed reaches that release.
 
 Because every caller follows `main`, the toolkit has no version tags. A release is the `dev` to `main` pull request, and the org-wide note in CONTRIBUTING about tagging releases does not apply to this repo. Before that pull request merges, every adopter's `dev` is preflighted against the change with [`tools/preflight`](tools/preflight/README.md). A change to `mach-release.yml` or its script is also rehearsed by dispatching `release-rehearsal.yml` on the branch.
