@@ -1,8 +1,0 @@
-paths:
-  .github/workflows/mach-lib.yml:
-    ignore:
-      # the runner populates job.workflow_* inside a called workflow; actionlint's schema predates them
-      - 'property "workflow_(repository|sha)" is not defined in object type'
-  .github/workflows/mach-release.yml:
-    ignore:
-      - 'property "workflow_(repository|sha)" is not defined in object type'
