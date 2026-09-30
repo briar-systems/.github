@@ -41,13 +41,8 @@ Issues follow an orthogonal, faceted tagging system across five sets:
 
 Tags mix and match across sets (for example, `patch`, `fix`, `tooling`). When filing an issue, select the applicable tags in the sidebar.
 
-## Milestones
-Milestones record status, in every repository:
-- `active`: the current slice, in flight or queued next
-- `deferred`: planned for after the current slice
-- `parked`: deliberately set aside until something changes
-
-No milestone is backlog. An issue picked up moves to `active`, and a new slice re-sorts the rest. `blocked` is a label for a state, not a milestone, and SemVer comes from labels, never milestones.
+## Status
+There are no milestones. Work in flight is an open draft pull request. `parked` marks an issue deliberately set aside until something changes, with the condition for picking it back up in a comment. Every other open issue is backlog. `blocked` is a label for a state, and SemVer comes from labels.
 
 ## Versioning
 Repositories strictly follow [semantic versioning](https://semver.org/) (`vMAJOR.MINOR.PATCH`):
